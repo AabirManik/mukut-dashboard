@@ -1,0 +1,114 @@
+{
+  "server": {
+    "port": 3000,
+    "host": "0.0.0.0"
+  },
+  "hardware": {
+    "data_source": "simulator",
+    "serial_port": "COM3",
+    "baud_rate": 115200
+  },
+  "helmet": {
+    "default_id": "HELMET01",
+    "offline_timeout_ms": 10000,
+    "heartbeat_interval_ms": 2000
+  },
+  "network": {
+    "rssi_thresholds": {
+      "excellent": -65,
+      "good": -75,
+      "fair": -85,
+      "min_dbm": -110,
+      "max_dbm": -40
+    },
+    "nodes": [
+      {
+        "id": "NODE01",
+        "name": "Shaft Relay Node 1",
+        "role": "Surface / Shaft Uplink Station",
+        "type": "gateway",
+        "status": "ONLINE",
+        "available": true
+      },
+      {
+        "id": "NODE02",
+        "name": "Tunnel Relay Node 2",
+        "role": "Mid-Tunnel Intermediate Relay",
+        "type": "node",
+        "status": "ONLINE",
+        "available": true
+      },
+      {
+        "id": "HELMET01",
+        "name": "Miner Safety Helmet 01",
+        "role": "Wearable Sensor Node",
+        "type": "helmet",
+        "status": "ONLINE",
+        "available": true
+      }
+    ],
+    "default_links": [
+      {
+        "id": "link_node02_node01",
+        "source": "NODE02",
+        "destination": "NODE01",
+        "rssi": -68,
+        "distance": 52,
+        "status": "CONNECTED",
+        "available": true
+      },
+      {
+        "id": "link_helmet_node02",
+        "source": "HELMET01",
+        "destination": "NODE02",
+        "rssi": -72,
+        "distance": 37,
+        "status": "CONNECTED",
+        "available": true
+      }
+    ]
+  },
+  "thresholds": {
+    "methane": {
+      "name": "Methane",
+      "formula": "CH4",
+      "warning": 0.8,
+      "critical": 1.5,
+      "unit": "% vol",
+      "max_scale": 3.0,
+      "decimals": 2
+    },
+    "carbon_monoxide": {
+      "name": "Carbon Monoxide",
+      "formula": "CO",
+      "warning": 35.0,
+      "critical": 100.0,
+      "unit": "ppm",
+      "max_scale": 200.0,
+      "decimals": 0
+    },
+    "smoke": {
+      "name": "Smoke & Particulates",
+      "formula": "PM",
+      "warning": 150.0,
+      "critical": 300.0,
+      "unit": "ppm",
+      "max_scale": 500.0,
+      "decimals": 0
+    },
+    "temperature": {
+      "name": "Ambient Temperature",
+      "warning": 38.0,
+      "critical": 45.0,
+      "unit": "°C",
+      "decimals": 1
+    },
+    "humidity": {
+      "name": "Relative Humidity",
+      "warning": 85.0,
+      "critical": 95.0,
+      "unit": "%",
+      "decimals": 0
+    }
+  }
+}

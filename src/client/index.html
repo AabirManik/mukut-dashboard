@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MUKUT — Smart Coal Miner Helmet | Safety Overview</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="console-wrapper">
+    <!-- Header -->
+    <header class="console-header" id="mainHeader">
+      <div class="brand-group">
+        <div class="brand-title">MUKUT</div>
+        <div class="brand-divider">/</div>
+        <div class="brand-subtitle">SMART COAL MINER HELMET SYSTEM</div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="console-nav">
+        <a href="/dashboard" class="nav-tab active">SAFETY OVERVIEW</a>
+        <a href="/dashboard/network" class="nav-tab">UNDERGROUND NETWORK</a>
+        <a href="/dashboard/routing" class="nav-tab">ROUTING &amp; FAILOVER</a>
+      </nav>
+
+      <div class="header-status-group">
+        <div class="last-seen-badge" id="dataSourceBadge" style="margin-right: 12px;">
+          <span class="label">DATA SOURCE:</span>
+          <span class="value" id="dataSourceValue">SIMULATOR</span>
+        </div>
+        <div class="last-seen-badge" id="lastSeenDisplay">
+          <span class="label">LAST UPDATE:</span>
+          <span class="value" id="lastSeenValue">Connecting...</span>
+        </div>
+        <div class="helmet-status-badge is-online" id="helmetOnlineBadge">
+          <span class="status-dot"></span>
+          <span class="helmet-id" id="helmetIdDisplay">HELMET01</span>
+          <span class="helmet-state" id="helmetStateDisplay">ONLINE</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Console Grid -->
+    <main class="console-main">
+      <!-- Dominant Worker Safety Banner -->
+      <section class="worker-safety-card status-safe" id="workerSafetyCard">
+        <div class="card-meta-header">
+          <span class="section-label">WORKER SAFETY STATUS</span>
+          <span class="status-code" id="statusCodeDisplay">[ CODE 00: NOMINAL ]</span>
+        </div>
+        <div class="safety-state-title" id="safetyStateDisplay">SAFE</div>
+        <div class="safety-state-reason" id="safetyReasonDisplay">Nominal conditions — No emergency detected</div>
+      </section>
+
+      <!-- Primary Metrics Row -->
+      <section class="metrics-grid">
+        <!-- Temperature Metric Card -->
+        <div class="metric-card" id="tempCard">
+          <div class="metric-header">
+            <span class="metric-title">TEMPERATURE</span>
+            <span class="metric-badge status-normal" id="tempBadge">NORMAL</span>
+          </div>
+          <div class="metric-body">
+            <span class="metric-value" id="tempValue">--.-</span>
+            <span class="metric-unit">°C</span>
+          </div>
+          <div class="metric-footer">
+            <span class="threshold-hint">Threshold: &gt;38.0°C Warn | &gt;45.0°C Crit</span>
+          </div>
+        </div>
+
+        <!-- Humidity Metric Card -->
+        <div class="metric-card" id="humidityCard">
+          <div class="metric-header">
+            <span class="metric-title">HUMIDITY</span>
+            <span class="metric-badge status-normal" id="humidityBadge">NORMAL</span>
+          </div>
+          <div class="metric-body">
+            <span class="metric-value" id="humidityValue">--</span>
+            <span class="metric-unit">%</span>
+          </div>
+          <div class="metric-footer">
+            <span class="threshold-hint">Threshold: &gt;85% Warn | &gt;95% Crit</span>
+          </div>
+        </div>
+
+        <!-- SOS Status Card -->
+        <div class="metric-card" id="sosCard">
+          <div class="metric-header">
+            <span class="metric-title">EMERGENCY SOS</span>
+            <span class="metric-badge status-normal" id="sosBadge">INACTIVE</span>
+          </div>
+          <div class="metric-body">
+            <span class="metric-value sos-value" id="sosValue">INACTIVE</span>
+          </div>
+          <div class="metric-footer">
+            <span class="threshold-hint">Hardware Panic Button State</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Gas Monitoring Section -->
+      <section class="gas-monitoring-card">
+        <div class="card-meta-header">
+          <span class="section-label">ATMOSPHERIC GAS MONITORING</span>
+          <span class="gas-overall-badge status-normal" id="gasOverallBadge">ATMOSPHERE: NORMAL</span>
+        </div>
+
+        <div class="gas-table">
+          <!-- Methane Row -->
+          <div class="gas-row" id="methaneRow">
+            <div class="gas-ident">
+              <span class="gas-formula">CH₄</span>
+              <span class="gas-name">Methane</span>
+            </div>
+            <div class="gas-meter-container">
+              <div class="gas-meter-track">
+                <div class="gas-meter-fill" id="methaneFill" style="width: 10%;"></div>
+              </div>
+              <div class="gas-meter-scale">
+                <span>0.0</span>
+                <span class="scale-warn">Warn: 0.8</span>
+                <span class="scale-crit">Crit: 1.5</span>
+                <span>3.0 %vol</span>
+              </div>
+            </div>
+            <div class="gas-reading">
+              <span class="reading-num" id="methaneValue">0.00</span>
+              <span class="reading-unit">% vol</span>
+            </div>
+            <div class="gas-status-col">
+              <span class="status-pill status-normal" id="methaneStatus">NORMAL</span>
+            </div>
+          </div>
+
+          <!-- Carbon Monoxide Row -->
+          <div class="gas-row" id="coRow">
+            <div class="gas-ident">
+              <span class="gas-formula">CO</span>
+              <span class="gas-name">Carbon Monoxide</span>
+            </div>
+            <div class="gas-meter-container">
+              <div class="gas-meter-track">
+                <div class="gas-meter-fill" id="coFill" style="width: 8%;"></div>
+              </div>
+              <div class="gas-meter-scale">
+                <span>0</span>
+                <span class="scale-warn">Warn: 35</span>
+                <span class="scale-crit">Crit: 100</span>
+                <span>200 ppm</span>
+              </div>
+            </div>
+            <div class="gas-reading">
+              <span class="reading-num" id="coValue">0.0</span>
+              <span class="reading-unit">ppm</span>
+            </div>
+            <div class="gas-status-col">
+              <span class="status-pill status-normal" id="coStatus">NORMAL</span>
+            </div>
+          </div>
+
+          <!-- Smoke & Particulates Row -->
+          <div class="gas-row" id="smokeRow">
+            <div class="gas-ident">
+              <span class="gas-formula">PM</span>
+              <span class="gas-name">Smoke / Particulates</span>
+            </div>
+            <div class="gas-meter-container">
+              <div class="gas-meter-track">
+                <div class="gas-meter-fill" id="smokeFill" style="width: 12%;"></div>
+              </div>
+              <div class="gas-meter-scale">
+                <span>0</span>
+                <span class="scale-warn">Warn: 150</span>
+                <span class="scale-crit">Crit: 300</span>
+                <span>500 ppm</span>
+              </div>
+            </div>
+            <div class="gas-reading">
+              <span class="reading-num" id="smokeValue">0.0</span>
+              <span class="reading-unit">ppm</span>
+            </div>
+            <div class="gas-status-col">
+              <span class="status-pill status-normal" id="smokeStatus">NORMAL</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Recent Events Timeline -->
+      <section class="events-card">
+        <div class="card-meta-header">
+          <span class="section-label">RECENT SAFETY & SYSTEM EVENTS</span>
+          <span class="events-count" id="eventsCount">LOGGED: 0</span>
+        </div>
+        <div class="events-table-wrapper">
+          <table class="events-table">
+            <thead>
+              <tr>
+                <th style="width: 110px;">TIME</th>
+                <th style="width: 100px;">SEVERITY</th>
+                <th>DESCRIPTION</th>
+              </tr>
+            </thead>
+            <tbody id="eventsTableBody">
+              <tr>
+                <td colspan="3" class="empty-state">Awaiting events...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Simulator Demo Control Dock -->
+    <footer class="demo-dock" id="demoDock">
+      <div class="dock-header">
+        <span class="dock-title">SIMULATOR CONTROLS (DEMO TOOLBAR)</span>
+        <span class="active-mode-tag" id="activeModeDisplay">MODE: NORMAL</span>
+      </div>
+      <div class="dock-buttons">
+        <button class="btn-scenario active" data-scenario="NORMAL" id="btnNormal">NORMAL</button>
+        <button class="btn-scenario" data-scenario="GAS_WARNING" id="btnGasWarn">GAS WARNING</button>
+        <button class="btn-scenario" data-scenario="GAS_CRITICAL" id="btnGasCrit">GAS CRITICAL</button>
+        <button class="btn-scenario btn-danger-trigger" data-scenario="SOS" id="btnSos">SOS EMERGENCY</button>
+        <button class="btn-scenario btn-offline-trigger" data-scenario="HELMET_OFFLINE" id="btnOffline">HELMET OFFLINE</button>
+        <button class="btn-scenario btn-reset" data-scenario="RESET" id="btnReset">RESET SYSTEM</button>
+      </div>
+    </footer>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

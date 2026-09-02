@@ -1,0 +1,1512 @@
+/* ==========================================================================
+   MUKUT Smart Coal Miner Helmet — Industrial UI Style (Phase 1 & Phase 2)
+   Aesthetic: Black + White + Minimal + Technical + Industrial + Information-First
+   ========================================================================== */
+
+:root {
+  --bg-main: #f8f9fa;
+  --bg-card: #ffffff;
+  --bg-subtle: #f1f3f5;
+  
+  --border-strong: #0f172a;
+  --border-medium: #cbd5e1;
+  --border-subtle: #e2e8f0;
+
+  --text-primary: #09090b;
+  --text-secondary: #52525b;
+  --text-muted: #71717a;
+
+  /* Semantic Highlights - Applied sparingly and with high contrast */
+  --status-safe-bg: #f0fdf4;
+  --status-safe-border: #15803d;
+  --status-safe-text: #166534;
+
+  --status-warning-bg: #fffbeb;
+  --status-warning-border: #b45309;
+  --status-warning-text: #92400e;
+
+  --status-emergency-bg: #09090b;
+  --status-emergency-border: #b91c1c;
+  --status-emergency-text: #ffffff;
+  --status-emergency-accent: #ef4444;
+
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'IBM Plex Mono', Menlo, Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background-color: var(--bg-main);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.console-wrapper {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* --------------------------------------------------------------------------
+   Console Header & Navigation
+   -------------------------------------------------------------------------- */
+.console-header {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  padding: 12px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.brand-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-title {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  font-family: var(--font-mono);
+}
+
+.brand-divider {
+  color: var(--border-medium);
+  font-weight: 300;
+}
+
+.brand-subtitle {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.console-nav {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-subtle);
+  padding: 3px;
+  border: 1px solid var(--border-medium);
+}
+
+.nav-tab {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 5px 12px;
+  transition: all 0.15s ease;
+}
+
+.nav-tab:hover {
+  color: var(--text-primary);
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.nav-tab.active {
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.header-status-group {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.last-seen-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.last-seen-badge .value {
+  color: var(--text-primary);
+  font-weight: 600;
+  margin-left: 4px;
+}
+
+.helmet-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-card);
+}
+
+.helmet-status-badge.is-online .status-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #16a34a;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.helmet-status-badge.is-offline {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #991b1b;
+}
+
+.helmet-status-badge.is-offline .status-dot {
+  width: 8px;
+  height: 8px;
+  background-color: #dc2626;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* --------------------------------------------------------------------------
+   Network Callout Summary Banner (Phase 2)
+   -------------------------------------------------------------------------- */
+.network-summary-banner {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  padding: 10px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.banner-left, .banner-center, .banner-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.banner-label, .route-label, .target-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.network-health-pill {
+  font-weight: 800;
+  font-size: 11px;
+  padding: 2px 8px;
+  border: 1px solid var(--border-medium);
+}
+
+.route-path {
+  font-weight: 700;
+  color: var(--text-primary);
+  background: var(--bg-subtle);
+  padding: 3px 8px;
+  border: 1px solid var(--border-subtle);
+}
+
+.target-val {
+  font-weight: 800;
+  color: #0f172a;
+  border-bottom: 2px solid #0f172a;
+}
+
+/* --------------------------------------------------------------------------
+   Console Main Grid
+   -------------------------------------------------------------------------- */
+.console-main {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.card-meta-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.section-label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+/* --------------------------------------------------------------------------
+   Worker Safety Hero Card (Phase 1)
+   -------------------------------------------------------------------------- */
+.worker-safety-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border-strong);
+  padding: 24px 28px;
+  transition: all 0.2s ease;
+}
+
+.worker-safety-card .status-code {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.safety-state-title {
+  font-size: 48px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  margin: 4px 0 8px 0;
+  font-family: var(--font-mono);
+}
+
+.safety-state-reason {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.worker-safety-card.status-safe {
+  background: var(--status-safe-bg);
+  border-color: var(--status-safe-border);
+}
+.worker-safety-card.status-safe .safety-state-title {
+  color: var(--status-safe-text);
+}
+.worker-safety-card.status-safe .status-code {
+  color: var(--status-safe-text);
+}
+
+.worker-safety-card.status-warning {
+  background: var(--status-warning-bg);
+  border-color: var(--status-warning-border);
+}
+.worker-safety-card.status-warning .safety-state-title {
+  color: var(--status-warning-text);
+}
+.worker-safety-card.status-warning .safety-state-reason {
+  color: #78350f;
+  font-weight: 600;
+}
+.worker-safety-card.status-warning .status-code {
+  color: var(--status-warning-text);
+}
+
+.worker-safety-card.status-emergency {
+  background: var(--status-emergency-bg);
+  border-color: var(--status-emergency-accent);
+  color: #ffffff;
+}
+.worker-safety-card.status-emergency .safety-state-title {
+  color: #ffffff;
+}
+.worker-safety-card.status-emergency .safety-state-reason {
+  color: #fca5a5;
+  font-weight: 600;
+}
+.worker-safety-card.status-emergency .section-label {
+  color: #a1a1aa;
+}
+.worker-safety-card.status-emergency .status-code {
+  color: #ef4444;
+}
+
+/* --------------------------------------------------------------------------
+   Primary Metrics Row (3 Columns)
+   -------------------------------------------------------------------------- */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.metric-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.metric-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.metric-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.metric-body {
+  margin: 12px 0 8px 0;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.metric-value {
+  font-family: var(--font-mono);
+  font-size: 32px;
+  font-weight: 800;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.metric-unit {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.metric-footer {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.metric-badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-subtle);
+}
+
+.status-normal {
+  background: #f0fdf4 !important;
+  border-color: #86efac !important;
+  color: #166534 !important;
+}
+
+.status-warning {
+  background: #fffbeb !important;
+  border-color: #fde68a !important;
+  color: #92400e !important;
+}
+
+.status-critical, .status-offline {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  color: #991b1b !important;
+}
+
+.sos-value {
+  font-size: 24px;
+}
+.metric-card.sos-active {
+  background: #fee2e2;
+  border-color: #b91c1c;
+}
+.metric-card.sos-active .sos-value {
+  color: #b91c1c;
+  font-weight: 900;
+}
+.metric-card.sos-active .metric-badge {
+  background: #b91c1c;
+  color: #ffffff;
+  border-color: #b91c1c;
+}
+
+/* --------------------------------------------------------------------------
+   Gas Monitoring Section
+   -------------------------------------------------------------------------- */
+.gas-monitoring-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  padding: 18px 22px;
+}
+
+.gas-overall-badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border: 1px solid var(--border-medium);
+}
+
+.gas-table {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.gas-row {
+  display: grid;
+  grid-template-columns: 180px 1fr 140px 110px;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 12px;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+}
+
+.gas-ident {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.gas-formula {
+  font-family: var(--font-mono);
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.gas-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.gas-meter-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.gas-meter-track {
+  height: 10px;
+  background: #e2e8f0;
+  border: 1px solid var(--border-medium);
+  position: relative;
+  overflow: hidden;
+}
+
+.gas-meter-fill {
+  height: 100%;
+  background-color: #0f172a;
+  transition: width 0.3s ease, background-color 0.2s ease;
+}
+
+.gas-meter-scale {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.gas-reading {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 6px;
+  font-family: var(--font-mono);
+}
+
+.reading-num {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.reading-unit {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.gas-status-col {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.status-pill {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-card);
+  display: inline-block;
+  text-align: center;
+}
+
+/* --------------------------------------------------------------------------
+   Events Card
+   -------------------------------------------------------------------------- */
+.events-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  padding: 16px 20px;
+}
+
+.events-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.events-table-wrapper {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.events-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+.events-table th {
+  text-align: left;
+  padding: 6px 8px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-medium);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.events-table td {
+  padding: 8px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.event-severity-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 5px;
+  border: 1px solid var(--border-medium);
+  display: inline-block;
+}
+
+.event-severity-tag.tag-info {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.event-severity-tag.tag-warning {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.event-severity-tag.tag-emergency {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #991b1b;
+  font-weight: 800;
+}
+
+/* ==========================================================================
+   PHASE 2: Underground Network Topology & Link Styling
+   ========================================================================== */
+.topology-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border-strong);
+  padding: 22px 26px;
+}
+
+.topology-canvas-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0px;
+  margin: 16px 0;
+}
+
+.topology-node-box {
+  width: 100%;
+  max-width: 540px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-strong);
+  padding: 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.topology-node-box.node-offline {
+  background: #fef2f2;
+  border-color: #dc2626;
+  opacity: 0.85;
+}
+
+.topology-node-box.node-helmet {
+  border-width: 3px;
+  border-color: #0f172a;
+  background: #fafafa;
+}
+
+.topology-node-box.node-gateway {
+  border-top-width: 4px;
+}
+
+.node-box-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.node-type-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.node-status-pill {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  padding: 2px 7px;
+  border: 1px solid var(--border-medium);
+}
+
+.node-id {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: 0.04em;
+}
+
+.node-role {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Link Connectors */
+.topology-link-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  width: 100%;
+  max-width: 540px;
+  margin: 0 auto;
+}
+
+.link-line {
+  width: 3px;
+  height: 24px;
+  background-color: var(--border-strong);
+  transition: background-color 0.2s ease;
+}
+
+.topology-link-connector.link-weak .link-line {
+  background-color: #b45309;
+  width: 3px;
+}
+
+.topology-link-connector.link-disconnected .link-line {
+  background: repeating-linear-gradient(
+    to bottom,
+    #dc2626,
+    #dc2626 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  width: 3px;
+}
+
+.link-metrics-badge {
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-strong);
+  padding: 6px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  min-width: 360px;
+  transition: all 0.2s ease;
+}
+
+.topology-link-connector.is-active-helmet-link .link-metrics-badge {
+  border: 2px solid #0f172a;
+  background: #ffffff;
+}
+
+.topology-link-connector.link-weak .link-metrics-badge {
+  background: #fffbeb;
+  border-color: #b45309;
+}
+
+.topology-link-connector.link-disconnected .link-metrics-badge {
+  background: #fee2e2;
+  border-color: #dc2626;
+}
+
+.link-direction {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.link-data-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.link-rssi {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+.link-sep {
+  color: var(--border-medium);
+}
+
+.link-dist {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.link-quality {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 5px;
+  border: 1px solid var(--border-medium);
+}
+
+/* Lower Split Grid: Link Details & Diagnostics */
+.network-bottom-grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+
+.network-table-card, .network-summary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  padding: 16px 20px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-top: 6px;
+}
+
+.data-table th {
+  text-align: left;
+  padding: 8px;
+  background: var(--bg-subtle);
+  border-bottom: 1px solid var(--border-medium);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.data-table td {
+  padding: 10px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: middle;
+}
+
+.mini-signal-bar {
+  display: inline-flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 12px;
+}
+
+.mini-signal-bar .bar-seg {
+  width: 3px;
+  background: #cbd5e1;
+}
+.mini-signal-bar .bar-seg.on {
+  background: #0f172a;
+}
+.mini-signal-bar.weak .bar-seg.on {
+  background: #b45309;
+}
+
+.diag-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.diag-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.diag-label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.diag-val {
+  font-weight: 800;
+  color: var(--text-primary);
+}
+
+/* --------------------------------------------------------------------------
+   Simulator Demo Dock (Bottom Toolbar)
+   -------------------------------------------------------------------------- */
+.demo-dock {
+  background: #ffffff;
+  border: 1px dashed var(--border-strong);
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dock-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dock-title {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.active-mode-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 2px 8px;
+  background: #0f172a;
+  color: #ffffff;
+}
+
+.dock-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-scenario {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.btn-scenario:hover {
+  background: var(--bg-subtle);
+}
+
+.btn-scenario.active {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.btn-danger-trigger {
+  border-color: #b91c1c;
+  color: #b91c1c;
+}
+.btn-danger-trigger.active {
+  background: #b91c1c;
+  color: #ffffff;
+}
+
+.btn-offline-trigger {
+  border-color: #475569;
+}
+
+.btn-reset {
+  background: var(--bg-subtle);
+  border-color: var(--border-medium);
+  margin-left: auto;
+}
+
+/* ==========================================================================
+   PHASE 3B: Routing & Failover Visualization Styles
+   ========================================================================== */
+
+/* WebSocket Connection Badge in Header */
+.ws-connection-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border: 1px solid var(--border-medium);
+}
+
+.ws-connection-badge .status-dot {
+  width: 6px;
+  height: 6px;
+  background-color: #16a34a;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.ws-connection-badge.status-critical .status-dot {
+  background-color: #dc2626;
+}
+
+/* Route Transition Flash Notification */
+.route-transition-banner {
+  background: #0f172a;
+  color: #ffffff;
+  border: 2px solid #38bdf8;
+  padding: 10px 18px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  animation: pulse-border 1.5s infinite alternate;
+}
+
+.transition-icon {
+  font-size: 16px;
+  color: #facc15;
+}
+
+@keyframes pulse-border {
+  from { border-color: #38bdf8; }
+  to { border-color: #facc15; }
+}
+
+/* Route Hero Card */
+.route-hero-card {
+  background: var(--bg-card);
+  border: 2px solid var(--border-strong);
+  padding: 22px 26px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  transition: all 0.2s ease;
+}
+
+.route-hero-card.status-normal {
+  background: #f0fdf4;
+  border-color: #15803d;
+}
+
+.route-hero-card.status-warning {
+  background: #fffbeb;
+  border-color: #b45309;
+}
+
+.route-hero-card.status-critical {
+  background: #09090b;
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.route-status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.route-status-title {
+  font-family: var(--font-mono);
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  line-height: 1;
+}
+
+.route-hero-card.status-normal .route-status-title {
+  color: #166534;
+}
+
+.route-hero-card.status-warning .route-status-title {
+  color: #92400e;
+}
+
+.route-hero-card.status-critical .route-status-title {
+  color: #ef4444;
+}
+
+.route-hero-card.status-critical .section-label {
+  color: #94a3b8;
+}
+
+.route-hero-card.status-critical .status-code {
+  color: #ef4444;
+}
+
+/* Route Node Chains */
+.route-chain-container, .previous-route-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.route-chain-label, .prev-route-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+}
+
+.route-hero-card.status-critical .route-chain-label {
+  color: #cbd5e1;
+}
+
+.route-chain-nodes, .prev-route-nodes {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.route-node-chip {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  padding: 8px 14px;
+  background: #ffffff;
+  border: 2px solid #0f172a;
+  color: #0f172a;
+  letter-spacing: 0.03em;
+  box-shadow: 1px 1px 0px rgba(0, 0, 0, 0.2);
+}
+
+.route-hero-card.status-critical .route-node-chip {
+  background: #18181b;
+  border-color: #ef4444;
+  color: #fca5a5;
+}
+
+.route-node-chip.chip-helmet {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.route-node-chip.chip-gateway {
+  border-width: 3px;
+  border-color: #0f172a;
+}
+
+.route-node-chip.chip-disconnected {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #991b1b;
+  font-weight: 900;
+}
+
+.route-node-chip.chip-prev {
+  background: #f1f5f9;
+  border: 1px dashed #64748b;
+  color: #64748b;
+  font-size: 11px;
+  padding: 4px 10px;
+}
+
+.route-arrow {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 900;
+  color: #0f172a;
+}
+
+.route-hero-card.status-critical .route-arrow {
+  color: #ef4444;
+}
+
+.route-arrow.prev-arrow {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+/* Route Impact Strip */
+.route-impact-strip {
+  display: grid;
+  grid-template-columns: 200px 220px 1fr;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--border-medium);
+  padding: 8px 14px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  margin-top: 4px;
+}
+
+.route-hero-card.status-critical .route-impact-strip {
+  background: #18181b;
+  border-color: #334155;
+}
+
+.impact-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.impact-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.route-hero-card.status-critical .impact-label {
+  color: #94a3b8;
+}
+
+.impact-val {
+  font-weight: 800;
+}
+
+/* --------------------------------------------------------------------------
+   Mesh Routing Topology Graph 
+   -------------------------------------------------------------------------- */
+.routing-graph-card {
+  padding: 24px;
+}
+
+.mesh-graph-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
+  gap: 0px;
+}
+
+.graph-row {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.mesh-node-box {
+  width: 100%;
+  max-width: 440px;
+  background: var(--bg-card);
+  border: 2px solid var(--border-strong);
+  padding: 12px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.mesh-node-box.node-in-route {
+  border-color: #0f172a;
+  border-width: 2px;
+  background: #ffffff;
+}
+
+.mesh-node-box.node-offline {
+  background: #fef2f2;
+  border-color: #dc2626;
+}
+
+.mesh-node-box.node-bypassed {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  opacity: 0.75;
+}
+
+.mesh-node-name {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 900;
+  color: var(--text-primary);
+  letter-spacing: 0.03em;
+}
+
+.mesh-node-desc {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.route-membership-tag {
+  align-self: flex-start;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 800;
+  padding: 2px 6px;
+  margin-top: 4px;
+  border: 1px solid var(--border-medium);
+}
+
+.route-membership-tag.in-route {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+.route-membership-tag.bypassed {
+  background: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.route-membership-tag.offline {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #dc2626;
+}
+
+/* Split Area for Primary Branch vs Alternate Bypass */
+.graph-split-area {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  width: 100%;
+  max-width: 780px;
+  gap: 24px;
+  margin: 0 auto;
+  align-items: center;
+}
+
+.branch-column {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.alternate-bypass-wrapper {
+  width: 100%;
+  background: #fafafa;
+  border: 1px dashed #64748b;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.alternate-tag-header {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  color: #475569;
+  letter-spacing: 0.06em;
+}
+
+.bypass-indicator-text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+/* Graph Link Connectors */
+.graph-link-segment {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 440px;
+}
+
+.graph-link-line {
+  width: 3px;
+  height: 20px;
+  background-color: var(--border-strong);
+  transition: all 0.2s ease;
+}
+
+.graph-link-segment.link-active .graph-link-line {
+  background-color: #0f172a;
+  width: 4px;
+}
+
+.graph-link-segment.link-standby .graph-link-line {
+  background: repeating-linear-gradient(
+    to bottom,
+    #94a3b8,
+    #94a3b8 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  width: 2px;
+}
+
+.graph-link-segment.link-disconnected .graph-link-line {
+  background: repeating-linear-gradient(
+    to bottom,
+    #dc2626,
+    #dc2626 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  width: 3px;
+}
+
+.graph-link-badge {
+  background: #ffffff;
+  border: 1px solid var(--border-strong);
+  padding: 4px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  max-width: 380px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  transition: all 0.2s ease;
+}
+
+.bypass-badge {
+  max-width: 100%;
+}
+
+.graph-link-segment.link-active .graph-link-badge {
+  border: 2px solid #0f172a;
+  background: #ffffff;
+  font-weight: 700;
+}
+
+.graph-link-segment.link-standby .graph-link-badge {
+  border: 1px dashed #94a3b8;
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.graph-link-segment.link-disconnected .graph-link-badge {
+  border: 1px solid #dc2626;
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge-dir {
+  font-weight: 700;
+}
+
+.badge-metrics {
+  color: var(--text-secondary);
+}
+
+.badge-role {
+  font-weight: 800;
+  font-size: 9px;
+  padding: 1px 4px;
+  border: 1px solid var(--border-medium);
+  background: var(--bg-subtle);
+}
+
+.graph-link-segment.link-active .badge-role {
+  background: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+}
+
+/* Routing Events Timeline List */
+.routing-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.routing-event-item {
+  padding: 8px 10px;
+  background: var(--bg-subtle);
+  border-left: 3px solid var(--border-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.event-meta-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.event-time {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.event-msg {
+  color: var(--text-primary);
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+/* --------------------------------------------------------------------------
+   Responsive Adjustments
+   -------------------------------------------------------------------------- */
+@media (max-width: 900px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .network-bottom-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .gas-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .graph-split-area {
+    grid-template-columns: 1fr;
+  }
+
+  .route-impact-strip {
+    grid-template-columns: 1fr;
+  }
+}
+

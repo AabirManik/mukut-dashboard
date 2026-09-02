@@ -1,0 +1,26 @@
+{
+  "name": "mukut-dashboard",
+  "version": "1.0.0",
+  "description": "MUKUT Smart Coal Miner Helmet - Real-Time Safety Dashboard & Telemetry System",
+  "main": "src/server/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server/server.js",
+    "dev": "node src/server/server.js",
+    "test": "node test/phase1_test.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "serialport": "^13.0.0",
+    "ws": "^8.18.0"
+  },
+  "keywords": [
+    "mukut",
+    "miner-safety",
+    "lora",
+    "iot",
+    "dashboard"
+  ],
+  "author": "",
+  "license": "ISC"
+}
