@@ -79,10 +79,10 @@
             <div class="node-role">Main Shaft Surface / Station Relay Hub</div>
           </div>
 
-          <!-- SINGLE PATH TOPOLOGY -->
+          <!-- CHAIN TOPOLOGY: NODE01 <-> NODE02 <-> NODE03 <-> HELMET01 -->
           <div style="display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 600px; margin: 20px auto;">
             
-            <!-- LINK: NODE01 <-> NODE02 -->
+            <!-- LINK: NODE02 <-> NODE01 -->
             <div class="topology-link-connector" id="link_node02_node01">
               <div class="link-line"></div>
               <div class="link-metrics-badge">
@@ -106,16 +106,40 @@
               <div class="node-role">Intermediate Relay Station</div>
             </div>
 
-            <!-- LINK: NODE02 <-> HELMET01 -->
-            <div class="topology-link-connector is-active-helmet-link" id="link_helmet_node02">
+            <!-- LINK: NODE03 <-> NODE02 -->
+            <div class="topology-link-connector" id="link_node03_node02">
               <div class="link-line"></div>
               <div class="link-metrics-badge">
-                <span class="link-direction">HELMET01 ◄──► NODE02</span>
+                <span class="link-direction">NODE03 ◄──► NODE02</span>
                 <div class="link-data-row">
-                  <span class="link-rssi" id="rssi_link_helmet_node02">-72 dBm</span>
+                  <span class="link-rssi" id="rssi_link_node03_node02">-70 dBm</span>
                   <span class="link-sep">|</span>
-                  <span class="link-dist" id="dist_link_helmet_node02">EST. 37 m</span>
-                  <span class="link-quality status-normal" id="qual_link_helmet_node02">GOOD</span>
+                  <span class="link-dist" id="dist_link_node03_node02">EST. 35 m</span>
+                  <span class="link-quality status-normal" id="qual_link_node03_node02">GOOD</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- NODE 03 -->
+            <div class="topology-node-box node-relay" id="node_NODE03" style="margin-top: 10px;">
+              <div class="node-box-header">
+                <span class="node-type-tag">RELAY 03</span>
+                <span class="node-status-pill status-normal" id="status_NODE03">ONLINE</span>
+              </div>
+              <div class="node-id">NODE03</div>
+              <div class="node-role">Working Face Access Relay</div>
+            </div>
+
+            <!-- LINK: HELMET01 <-> NODE03 -->
+            <div class="topology-link-connector is-active-helmet-link" id="link_helmet_node03">
+              <div class="link-line"></div>
+              <div class="link-metrics-badge">
+                <span class="link-direction">HELMET01 ◄──► NODE03</span>
+                <div class="link-data-row">
+                  <span class="link-rssi" id="rssi_link_helmet_node03">-61 dBm</span>
+                  <span class="link-sep">|</span>
+                  <span class="link-dist" id="dist_link_helmet_node03">EST. 18 m</span>
+                  <span class="link-quality status-normal" id="qual_link_helmet_node03">EXCELLENT</span>
                 </div>
               </div>
             </div>
@@ -201,6 +225,7 @@
         <button class="btn-scenario active" data-scenario="NETWORK_NORMAL" id="btnNetNormal">NETWORK NORMAL</button>
         <button class="btn-scenario" data-scenario="WEAK_LINK" id="btnWeakLink">WEAK LINK (-86 dBm)</button>
         <button class="btn-scenario btn-offline-trigger" data-scenario="NODE02_OFFLINE" id="btnNodeOffline">NODE02 OFFLINE</button>
+        <button class="btn-scenario btn-danger-trigger" data-scenario="NODE03_FAILURE" id="btnNode03Fail">NODE03 FAILURE</button>
         <button class="btn-scenario btn-reset" data-scenario="RESET_NETWORK" id="btnResetNet">RESET NETWORK</button>
       </div>
     </footer>

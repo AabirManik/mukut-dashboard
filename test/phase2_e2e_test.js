@@ -53,7 +53,7 @@ async function runTest() {
 
   const weakState = await (await fetch('http://localhost:3000/api/state')).json();
   assert.strictEqual(weakState.network.health, 'DEGRADED');
-  const weakLink = weakState.network.links.find(l => l.id === 'link_helmet_node02');
+  const weakLink = weakState.network.links.find(l => l.id === 'link_helmet_node03');
   assert.ok(weakLink.rssi <= -84, 'RSSI must be attenuated');
   assert.strictEqual(weakLink.quality, 'WEAK');
   console.log(`✓ 5. WEAK_LINK triggered: RSSI=${weakLink.rssi} dBm, Quality=${weakLink.quality}, Health=${weakState.network.health}`);

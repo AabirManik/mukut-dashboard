@@ -68,7 +68,7 @@ async function runTests() {
   console.log(`  Status        : ${route.status}`);
   console.log(`  FailoverActive: ${route.failover_active}`);
   console.log(`  FailedNode    : ${route.failed_node}`);
-  console.log(`  Result        : ${route.status === 'NORMAL' && route.current_route.length === 3 && !route.failover_active ? 'PASS ✓' : 'FAIL ✗'}`);
+  console.log(`  Result        : ${route.status === 'NORMAL' && route.current_route.length === 4 && !route.failover_active ? 'PASS ✓' : 'FAIL ✗'}`);
 
   // Step 2: NODE02_OFFLINE (Failover)
   await request('http://localhost:3000/api/simulator/scenario', {
@@ -105,7 +105,7 @@ async function runTests() {
   console.log(`  Status        : ${route.status}`);
   console.log(`  FailoverActive: ${route.failover_active}`);
   const s3Pass = route.status === 'NORMAL' && 
-                 route.current_route.join('->') === 'HELMET01->NODE02->NODE01' && 
+                 route.current_route.join('->') === 'HELMET01->NODE03->NODE02->NODE01' && 
                  route.failover_active === false;
   console.log(`  Result        : ${s3Pass ? 'PASS ✓' : 'FAIL ✗'}`);
 
@@ -137,7 +137,7 @@ async function runTests() {
   console.log(`\n[STEP 5: RESET -> NOMINAL STATE]`);
   console.log(`  Current Route : ${route.current_route.join(' -> ')}`);
   console.log(`  Status        : ${route.status}`);
-  const s5Pass = route.status === 'NORMAL' && route.current_route.length === 3;
+  const s5Pass = route.status === 'NORMAL' && route.current_route.length === 4;
   console.log(`  Result        : ${s5Pass ? 'PASS ✓' : 'FAIL ✗'}`);
 
   console.log('\n=======================================================');

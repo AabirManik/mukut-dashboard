@@ -278,7 +278,7 @@ export class StateManager {
         const lostNode = this.previousRoute.find(n => !newRoute.includes(n) && n !== 'HELMET01' && n !== 'NODE01');
         
         // Define normal expected route for the new topology
-        const normalRouteStr = 'HELMET01->NODE02->NODE01';
+        const normalRouteStr = 'HELMET01->NODE03->NODE02->NODE01';
         
         if (newRouteStr === normalRouteStr) {
           this.routeStatus = 'NORMAL';

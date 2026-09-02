@@ -56,7 +56,7 @@ console.log('\n[TEST GROUP 3] Network Health & Degradation Tests:');
 
   // Scenario: Link degradation
   sm.updateNetworkTelemetry([
-    { id: 'link_helmet_node02', rssi: -87, status: 'CONNECTED' }
+    { id: 'link_helmet_node03', rssi: -87, status: 'CONNECTED' }
   ]);
 
   const degState = sm.getFullState();
@@ -69,7 +69,7 @@ console.log('\n[TEST GROUP 3] Network Health & Degradation Tests:');
   const node2 = offlineState.network.nodes.find(n => n.id === 'NODE02');
   assert.strictEqual(node2.status, 'OFFLINE', 'NODE02 must be OFFLINE');
 
-  const link2 = offlineState.network.links.find(l => l.id === 'link_node03_node02');
+  const link2 = offlineState.network.links.find(l => l.id === 'link_node02_node01');
   assert.strictEqual(link2.status, 'DISCONNECTED', 'Links attached to offline node must be DISCONNECTED');
   assert.strictEqual(offlineState.network.health, 'DEGRADED', 'Network health remains DEGRADED');
   console.log('  ✓ Setting NODE02 to OFFLINE severs connected links and maintains DEGRADED health');
@@ -99,7 +99,7 @@ console.log('\n[TEST GROUP 4] Phase 2 Network Simulator Tests:');
   // Weak Link Scenario
   sim.setScenario('WEAK_LINK');
   const p2 = sim.generatePacket();
-  const weakLink = p2.network.links.find(l => l.id === 'link_node03_node02');
+  const weakLink = p2.network.links.find(l => l.id === 'link_helmet_node03');
   assert.ok(weakLink.rssi <= -84, 'Weak link scenario should have attenuated RSSI');
   console.log(`  ✓ Simulator WEAK_LINK scenario generated RSSI=${weakLink.rssi} dBm`);
 

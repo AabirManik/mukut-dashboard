@@ -5,6 +5,8 @@
   },
   "hardware": {
     "data_source": "simulator",
+    "node1_ip": "192.168.4.1",
+    "node1_poll_interval_ms": 1500,
     "serial_port": "COM3",
     "baud_rate": 115200
   },
@@ -39,6 +41,14 @@
         "available": true
       },
       {
+        "id": "NODE03",
+        "name": "Deep Tunnel Relay Node 3",
+        "role": "Working Face Access Relay",
+        "type": "node",
+        "status": "ONLINE",
+        "available": true
+      },
+      {
         "id": "HELMET01",
         "name": "Miner Safety Helmet 01",
         "role": "Wearable Sensor Node",
@@ -58,11 +68,29 @@
         "available": true
       },
       {
-        "id": "link_helmet_node02",
-        "source": "HELMET01",
+        "id": "link_node03_node02",
+        "source": "NODE03",
         "destination": "NODE02",
-        "rssi": -72,
-        "distance": 37,
+        "rssi": -70,
+        "distance": 35,
+        "status": "CONNECTED",
+        "available": true
+      },
+      {
+        "id": "link_helmet_node03",
+        "source": "HELMET01",
+        "destination": "NODE03",
+        "rssi": -61,
+        "distance": 18,
+        "status": "CONNECTED",
+        "available": true
+      },
+      {
+        "id": "link_node03_node01",
+        "source": "NODE03",
+        "destination": "NODE01",
+        "rssi": -79,
+        "distance": 64,
         "status": "CONNECTED",
         "available": true
       }

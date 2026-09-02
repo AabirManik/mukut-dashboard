@@ -128,7 +128,7 @@
             </div>
           </div>
 
-          <!-- SINGLE PATH TOPOLOGY -->
+          <!-- CHAIN TOPOLOGY: NODE01 <-> NODE02 <-> NODE03 <-> HELMET01 -->
           <div style="display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 600px; margin: 20px auto;">
             
             <div class="graph-link-segment link-active" id="graphLink_link_node02_node01">
@@ -150,12 +150,31 @@
               <span class="route-membership-tag in-route" id="member_NODE02">IN ROUTE</span>
             </div>
 
-            <div class="graph-link-segment link-active" id="graphLink_link_helmet_node02">
+            <div class="graph-link-segment link-active" id="graphLink_link_node03_node02">
               <div class="graph-link-line"></div>
               <div class="graph-link-badge">
-                <span class="badge-dir">HELMET01 ◄──► NODE02</span>
-                <span class="badge-metrics" id="metrics_link_helmet_node02">-72 dBm | EST. 37 m</span>
-                <span class="badge-role" id="role_link_helmet_node02">PRIMARY UPLINK</span>
+                <span class="badge-dir">NODE03 ◄──► NODE02</span>
+                <span class="badge-metrics" id="metrics_link_node03_node02">-70 dBm | EST. 35 m</span>
+                <span class="badge-role" id="role_link_node03_node02">RELAY TRUNK</span>
+              </div>
+            </div>
+
+            <div class="mesh-node-box node-relay" id="graphNode_NODE03" style="margin-top: 10px;">
+              <div class="node-box-header">
+                <span class="node-type-tag">RELAY 03</span>
+                <span class="node-status-pill status-normal" id="graphStatus_NODE03">ONLINE</span>
+              </div>
+              <div class="mesh-node-name">NODE03</div>
+              <div class="mesh-node-desc">Working Face Access Relay</div>
+              <span class="route-membership-tag in-route" id="member_NODE03">IN ROUTE</span>
+            </div>
+
+            <div class="graph-link-segment link-active" id="graphLink_link_helmet_node03">
+              <div class="graph-link-line"></div>
+              <div class="graph-link-badge">
+                <span class="badge-dir">HELMET01 ◄──► NODE03</span>
+                <span class="badge-metrics" id="metrics_link_helmet_node03">-61 dBm | EST. 18 m</span>
+                <span class="badge-role" id="role_link_helmet_node03">PRIMARY UPLINK</span>
               </div>
             </div>
 

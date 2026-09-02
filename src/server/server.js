@@ -7,6 +7,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { StateManager } from './stateManager.js';
 import { TelemetrySimulator } from './simulator.js';
 import { SerialBridge } from './serialBridge.js';
+import { Node1Bridge } from './node1Bridge.js';
 import { validateTelemetry } from './schema.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -26,12 +27,20 @@ const config = stateManager.getConfig();
 const simulator = new TelemetrySimulator(stateManager, config.helmet.heartbeat_interval_ms || 2000);
 
 const isHardwareMode = config.hardware && config.hardware.data_source === 'hardware';
+const isNode1Mode = config.hardware && config.hardware.data_source === 'node1';
 let serialBridge = null;
+let node1Bridge = null;
 if (isHardwareMode) {
   serialBridge = new SerialBridge(
     stateManager, 
     config.hardware.serial_port || 'COM3', 
     config.hardware.baud_rate || 115200
+  );
+} else if (isNode1Mode) {
+  node1Bridge = new Node1Bridge(
+    stateManager,
+    config.hardware.node1_ip || '192.168.4.1',
+    config.hardware.node1_poll_interval_ms || 1500
   );
 }
 
@@ -182,11 +191,13 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Start data source (Hardware or Simulator)
+// Start data source (Hardware, Node1 WiFi, or Simulator)
 if (isHardwareMode && serialBridge) {
   console.log(`[INIT] Starting in HARDWARE mode on port ${serialBridge.portPath}`);
   serialBridge.start();
-  // Keep simulator available but don't start its tick loop automatically
+} else if (isNode1Mode && node1Bridge) {
+  console.log(`[INIT] Starting in NODE1 WiFi mode — polling http://${node1Bridge.node1Ip}/api/telemetry`);
+  node1Bridge.start();
 } else {
   console.log(`[INIT] Starting in SIMULATOR mode`);
   simulator.start();
@@ -200,9 +211,12 @@ server.listen(PORT, HOST, () => {
   console.log(` MUKUT Smart Coal Miner Helmet — Phase 4 Server`);
   console.log(` Safety Dashboard  : http://localhost:${PORT}/dashboard`);
   console.log(` Network Dashboard : http://localhost:${PORT}/dashboard/network`);
+  console.log(` Routing Dashboard : http://localhost:${PORT}/dashboard/routing`);
   console.log(` API Endpoint      : http://localhost:${PORT}/api/telemetry`);
   if (isHardwareMode) {
     console.log(` Data Source       : LIVE HARDWARE (${serialBridge.portPath})`);
+  } else if (isNode1Mode) {
+    console.log(` Data Source       : NODE1 WiFi (http://${config.hardware.node1_ip}/api/telemetry)`);
   } else {
     console.log(` Data Source       : SIMULATOR (${simulator.intervalMs}ms interval)`);
   }
