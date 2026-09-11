@@ -53,6 +53,28 @@
     eventsCount: document.getElementById('eventsCount'),
     eventsTableBody: document.getElementById('eventsTableBody'),
 
+    alertsContainer: document.getElementById('alertsContainer'),
+    helmetSliderMarker: document.getElementById('helmetSliderMarker'),
+    distNode2: document.getElementById('distNode2'),
+    distNode3: document.getElementById('distNode3'),
+    fixedDistance: document.getElementById('fixedDistance'),
+    lastKnownLocation: document.getElementById('lastKnownLocation'),
+    hazardNode2: document.getElementById('hazardNode2'),
+    hazardNode3: document.getElementById('hazardNode3'),
+    structuralOverallBadge: document.getElementById('structuralOverallBadge'),
+
+    casualtyCard: document.getElementById('casualtyCard'),
+    casualtyStatusBadge: document.getElementById('casualtyStatusBadge'),
+    rescueClosestNodeId: document.getElementById('rescueClosestNodeId'),
+    rescueClosestNodeStatus: document.getElementById('rescueClosestNodeStatus'),
+    rescueClosestDist: document.getElementById('rescueClosestDist'),
+    rescueClosestRssi: document.getElementById('rescueClosestRssi'),
+    rescueSecondaryNodeId: document.getElementById('rescueSecondaryNodeId'),
+    rescueSecondaryNodeStatus: document.getElementById('rescueSecondaryNodeStatus'),
+    rescueSecondaryDist: document.getElementById('rescueSecondaryDist'),
+    rescueSecondaryRssi: document.getElementById('rescueSecondaryRssi'),
+    casualtyIncidentSummary: document.getElementById('casualtyIncidentSummary'),
+
     activeModeDisplay: document.getElementById('activeModeDisplay'),
     scenarioButtons: document.querySelectorAll('.btn-scenario')
   };
@@ -132,7 +154,7 @@
         setStatusClass(elements.tempBadge, state.temp_status);
       }
 
-      if (elements.humidityValue) elements.humidityValue.textContent = Math.round(state.environment.humidity);
+      if (elements.humidityValue) elements.humidityValue.textContent = typeof state.environment.humidity === 'number' ? state.environment.humidity.toFixed(1) : state.environment.humidity;
       if (elements.humidityBadge) {
         elements.humidityBadge.textContent = state.humidity_status;
         setStatusClass(elements.humidityBadge, state.humidity_status);
@@ -162,10 +184,10 @@
         setStatusClass(elements.gasOverallBadge, state.gas_status.overall);
       }
 
-      // Methane
+      // Methane (CH4)
       const ch4 = state.gas_status.methane;
       if (ch4) {
-        if (elements.methaneValue) elements.methaneValue.textContent = ch4.value.toFixed(2);
+        if (elements.methaneValue) elements.methaneValue.textContent = ch4.value;
         if (elements.methaneFill) {
           elements.methaneFill.style.width = `${ch4.percentage}%`;
           elements.methaneFill.style.backgroundColor = ch4.status === 'CRITICAL' ? '#b91c1c' : ch4.status === 'WARNING' ? '#b45309' : '#0f172a';
@@ -176,10 +198,10 @@
         }
       }
 
-      // Carbon Monoxide
+      // Carbon Monoxide / LPG (CO)
       const co = state.gas_status.carbon_monoxide;
       if (co) {
-        if (elements.coValue) elements.coValue.textContent = co.value.toFixed(0);
+        if (elements.coValue) elements.coValue.textContent = co.value;
         if (elements.coFill) {
           elements.coFill.style.width = `${co.percentage}%`;
           elements.coFill.style.backgroundColor = co.status === 'CRITICAL' ? '#b91c1c' : co.status === 'WARNING' ? '#b45309' : '#0f172a';
@@ -190,10 +212,10 @@
         }
       }
 
-      // Smoke
+      // Smoke / H2 (PM)
       const smoke = state.gas_status.smoke;
       if (smoke) {
-        if (elements.smokeValue) elements.smokeValue.textContent = smoke.value.toFixed(0);
+        if (elements.smokeValue) elements.smokeValue.textContent = smoke.value;
         if (elements.smokeFill) {
           elements.smokeFill.style.width = `${smoke.percentage}%`;
           elements.smokeFill.style.backgroundColor = smoke.status === 'CRITICAL' ? '#b91c1c' : smoke.status === 'WARNING' ? '#b45309' : '#0f172a';
@@ -205,7 +227,117 @@
       }
     }
 
-    // 6. Events List
+    // 6. Alert Banners Container (Structural & Safety Alerts)
+    if (elements.alertsContainer) {
+      let alertsHtml = '';
+      if (Array.isArray(state.active_emergencies) && state.active_emergencies.length > 0) {
+        state.active_emergencies.forEach(em => {
+          alertsHtml += `<div class="alert-banner">🚨 <b>${em.source || 'CRITICAL'}:</b> ${em.message}</div>`;
+        });
+      }
+      if (Array.isArray(state.active_alerts) && state.active_alerts.length > 0) {
+        state.active_alerts.forEach(al => {
+          alertsHtml += `<div class="alert-banner warning">⚠️ <b>${al.source || 'WARNING'}:</b> ${al.message}</div>`;
+        });
+      }
+      elements.alertsContainer.innerHTML = alertsHtml;
+    }
+
+    // 7. Spatial Proximity Solver
+    if (state.spatial_position) {
+      const sp = state.spatial_position;
+      if (elements.helmetSliderMarker) elements.helmetSliderMarker.style.left = `${sp.relative_slider_pct != null ? sp.relative_slider_pct : 50}%`;
+      if (elements.distNode2) elements.distNode2.textContent = sp.dist_n2 != null && sp.dist_n2 >= 0 ? `${sp.dist_n2.toFixed(1)} m` : '-- m';
+      if (elements.distNode3) elements.distNode3.textContent = sp.dist_n3 != null && sp.dist_n3 >= 0 ? `${sp.dist_n3.toFixed(1)} m` : '-- m';
+      if (elements.fixedDistance) elements.fixedDistance.textContent = sp.fixed_dist != null && sp.fixed_dist >= 0 ? `${sp.fixed_dist.toFixed(1)} m` : '-- m';
+      if (elements.lastKnownLocation) elements.lastKnownLocation.textContent = sp.nearest_node || 'NODE03';
+    }
+
+    // 8. Structural Health & Tunnel Shake Monitoring
+    if (state.structural_health) {
+      const sh = state.structural_health;
+      if (elements.hazardNode2 && sh.node2) {
+        elements.hazardNode2.textContent = sh.node2.status || 'STABLE';
+        elements.hazardNode2.className = `hazard-pill ${sh.node2.status === 'CRITICAL_HAZARD' ? 'critical' : (sh.node2.status === 'WARNING_SHIFT' ? 'warning' : 'stable')}`;
+      }
+      if (elements.hazardNode3 && sh.node3) {
+        elements.hazardNode3.textContent = sh.node3.status || 'STABLE';
+        elements.hazardNode3.className = `hazard-pill ${sh.node3.status === 'CRITICAL_HAZARD' ? 'critical' : (sh.node3.status === 'WARNING_SHIFT' ? 'warning' : 'stable')}`;
+      }
+      if (elements.structuralOverallBadge) {
+        const hasCrit = sh.node2?.status === 'CRITICAL_HAZARD' || sh.node3?.status === 'CRITICAL_HAZARD';
+        const hasWarn = sh.node2?.status === 'WARNING_SHIFT' || sh.node3?.status === 'WARNING_SHIFT';
+        elements.structuralOverallBadge.textContent = hasCrit ? 'HAZARD: CRITICAL COLLAPSE/VIBRATION' : (hasWarn ? 'HAZARD: WARNING SHIFT' : 'SYSTEM STABLE');
+        setStatusClass(elements.structuralOverallBadge, hasCrit ? 'CRITICAL' : (hasWarn ? 'WARNING' : 'NORMAL'));
+      }
+    }
+
+    // 9. Casualty Assessment & Incident Rescue Dispatch Panel
+    if (state.casualty_assessment) {
+      const ca = state.casualty_assessment;
+      const isIncident = ca.has_incident;
+
+      if (elements.casualtyCard) {
+        if (isIncident) {
+          elements.casualtyCard.classList.add('incident-active');
+        } else {
+          elements.casualtyCard.classList.remove('incident-active');
+        }
+      }
+
+      if (elements.casualtyStatusBadge) {
+        if (ca.is_sos) {
+          elements.casualtyStatusBadge.textContent = '🚨 SOS CASUALTY ALARM ACTIVE';
+          elements.casualtyStatusBadge.className = 'status-pill status-emergency';
+        } else if (ca.hazards && ca.hazards.length > 0) {
+          elements.casualtyStatusBadge.textContent = `⚠️ STRUCTURAL HAZARD (${ca.hazards.map(h => `${h.node_id}: ${h.status}`).join(', ')})`;
+          elements.casualtyStatusBadge.className = 'status-pill status-critical';
+        } else {
+          elements.casualtyStatusBadge.textContent = 'ALL STATIONS SECURE';
+          elements.casualtyStatusBadge.className = 'status-pill status-normal';
+        }
+      }
+
+      // Closest Rescue Node
+      if (ca.closest_node) {
+        if (elements.rescueClosestNodeId) elements.rescueClosestNodeId.textContent = `${ca.closest_node.id} (${ca.closest_node.name || 'Station'})`;
+        if (elements.rescueClosestNodeStatus) {
+          elements.rescueClosestNodeStatus.textContent = ca.closest_node.hazard || 'ONLINE';
+          elements.rescueClosestNodeStatus.className = `hazard-pill ${ca.closest_node.hazard === 'CRITICAL_HAZARD' ? 'critical' : (ca.closest_node.hazard === 'WARNING_SHIFT' ? 'warning' : 'stable')}`;
+        }
+        if (elements.rescueClosestDist) elements.rescueClosestDist.textContent = `DISTANCE: ${ca.closest_node.distance_m != null ? `${ca.closest_node.distance_m} m` : '-- m'}`;
+        if (elements.rescueClosestRssi) elements.rescueClosestRssi.textContent = `SIGNAL: ${ca.closest_node.rssi_dbm} dBm`;
+      }
+
+      // Secondary Active Node / Shaking Node
+      const secondaryNode = (ca.active_nodes || []).find(n => !ca.closest_node || n.id !== ca.closest_node.id);
+      if (secondaryNode) {
+        if (elements.rescueSecondaryNodeId) elements.rescueSecondaryNodeId.textContent = `${secondaryNode.id} (${secondaryNode.name || 'Station'})`;
+        if (elements.rescueSecondaryNodeStatus) {
+          elements.rescueSecondaryNodeStatus.textContent = secondaryNode.hazard || 'ONLINE';
+          elements.rescueSecondaryNodeStatus.className = `hazard-pill ${secondaryNode.hazard === 'CRITICAL_HAZARD' ? 'critical' : (secondaryNode.hazard === 'WARNING_SHIFT' ? 'warning' : 'stable')}`;
+        }
+        if (elements.rescueSecondaryDist) elements.rescueSecondaryDist.textContent = `DISTANCE: ${secondaryNode.distance_m != null ? `${secondaryNode.distance_m} m` : '-- m'}`;
+        if (elements.rescueSecondaryRssi) elements.rescueSecondaryRssi.textContent = `SIGNAL: ${secondaryNode.rssi_dbm} dBm`;
+      }
+
+      // Incident Summary Banner
+      if (elements.casualtyIncidentSummary) {
+        if (ca.is_sos) {
+          elements.casualtyIncidentSummary.className = 'incident-summary-banner danger';
+          elements.casualtyIncidentSummary.innerHTML = `🚨 <b>CRITICAL DISPATCH:</b> Miner 01 triggered SOS panic switch! Recommend immediate extraction via <b>${ca.closest_node ? ca.closest_node.id : 'NODE03'}</b> (Distance: ${ca.closest_node?.distance_m}m, RSSI: ${ca.closest_node?.rssi_dbm} dBm).`;
+        } else if (ca.hazards && ca.hazards.length > 0) {
+          const h = ca.hazards[0];
+          elements.casualtyIncidentSummary.className = 'incident-summary-banner danger';
+          elements.casualtyIncidentSummary.innerHTML = `⚠️ <b>STRUCTURAL HAZARD DISPATCH:</b> ${h.name} detected ${h.status}! Miner location: ${h.miner_distance_m != null ? `${h.miner_distance_m}m` : '--'} from vibrating station (RSSI: ${h.rssi_dbm} dBm). Nearest safe extraction gateway: <b>${ca.closest_node ? ca.closest_node.id : 'NODE03'}</b> (${ca.closest_node?.distance_m != null ? `${ca.closest_node.distance_m}m` : '--'}, ${ca.closest_node?.rssi_dbm} dBm).`;
+        } else {
+          elements.casualtyIncidentSummary.className = 'incident-summary-banner';
+          elements.casualtyIncidentSummary.innerHTML = `ℹ️ <b>STANDBY MONITORING:</b> All stations structurally stable. Continuous spatial proximity tracking active (${ca.nearest_location_summary}).`;
+        }
+      }
+    }
+
+    // 10. Events List
     if (state.events && Array.isArray(state.events)) {
       renderEvents(state.events);
     }
@@ -294,8 +426,17 @@
           const cfg = await res.json();
           const dsValue = document.getElementById('dataSourceValue');
           if (dsValue && cfg.hardware) {
-            dsValue.textContent = cfg.hardware.data_source === 'hardware' ? 'LIVE HARDWARE' : 'SIMULATOR';
-            dsValue.style.color = cfg.hardware.data_source === 'hardware' ? '#10b981' : '#f59e0b';
+            const ds = cfg.hardware.data_source;
+            if (ds === 'hardware' || ds === 'serial') {
+              dsValue.textContent = 'LIVE HARDWARE (Serial)';
+              dsValue.style.color = '#10b981';
+            } else if (ds === 'node1' || ds === 'node1_wifi') {
+              dsValue.textContent = `LIVE NODE1 WiFi (${cfg.hardware.node1_ip})`;
+              dsValue.style.color = '#10b981';
+            } else {
+              dsValue.textContent = 'SIMULATOR';
+              dsValue.style.color = '#f59e0b';
+            }
           }
         }
       } catch (e) {

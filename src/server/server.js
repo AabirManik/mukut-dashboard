@@ -26,20 +26,24 @@ const stateManager = new StateManager();
 const config = stateManager.getConfig();
 const simulator = new TelemetrySimulator(stateManager, config.helmet.heartbeat_interval_ms || 2000);
 
-const isHardwareMode = config.hardware && config.hardware.data_source === 'hardware';
-const isNode1Mode = config.hardware && config.hardware.data_source === 'node1';
+const isHardwareMode = config.hardware && (config.hardware.data_source === 'hardware' || config.hardware.data_source === 'serial');
+const isNode1Mode = config.hardware && (config.hardware.data_source === 'node1' || config.hardware.data_source === 'node1_wifi');
+
 let serialBridge = null;
 let node1Bridge = null;
+
 if (isHardwareMode) {
   serialBridge = new SerialBridge(
-    stateManager, 
-    config.hardware.serial_port || 'COM3', 
+    stateManager,
+    config.hardware.serial_port || 'COM7',
     config.hardware.baud_rate || 115200
   );
-} else if (isNode1Mode) {
+}
+
+if (isNode1Mode || (config.hardware && config.hardware.node1_ip)) {
   node1Bridge = new Node1Bridge(
     stateManager,
-    config.hardware.node1_ip || '192.168.4.1',
+    config.hardware.node1_ip || '10.251.147.60',
     config.hardware.node1_poll_interval_ms || 1500
   );
 }
@@ -192,19 +196,39 @@ wss.on('connection', (ws) => {
 });
 
 // Start data source (Hardware, Node1 WiFi, or Simulator)
-if (isHardwareMode && serialBridge) {
-  console.log(`[INIT] Starting in HARDWARE mode on port ${serialBridge.portPath}`);
+let activeSources = [];
+
+if (serialBridge) {
+  console.log(`[INIT] Starting SerialBridge on port ${serialBridge.portPath}`);
   serialBridge.start();
-} else if (isNode1Mode && node1Bridge) {
-  console.log(`[INIT] Starting in NODE1 WiFi mode — polling http://${node1Bridge.node1Ip}/api/telemetry`);
+  activeSources.push(`SERIAL (${serialBridge.portPath})`);
+}
+
+if (node1Bridge) {
+  console.log(`[INIT] Starting Node1 WiFi Bridge — polling http://${node1Bridge.node1Ip}/api/telemetry`);
   node1Bridge.start();
-} else {
+  activeSources.push(`NODE1 WiFi (http://${node1Bridge.node1Ip}/api/telemetry)`);
+}
+
+if (!serialBridge && !node1Bridge) {
   console.log(`[INIT] Starting in SIMULATOR mode`);
   simulator.start();
+  activeSources.push(`SIMULATOR`);
 }
 
 const PORT = process.env.PORT || config.server.port || 3000;
 const HOST = config.server.host || '0.0.0.0';
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`[ERROR] Port ${PORT} is already in use.`);
+    console.error(`[ERROR] Run: netstat -ano | findstr :${PORT}  to find and kill the process.`);
+    console.error(`[ERROR] Or set a different port via the PORT environment variable, e.g.:  PORT=3001 npm start`);
+  } else {
+    console.error(`[ERROR] Server error: ${err.message}`);
+  }
+  process.exit(1);
+});
 
 server.listen(PORT, HOST, () => {
   console.log(`=======================================================`);
@@ -213,12 +237,6 @@ server.listen(PORT, HOST, () => {
   console.log(` Network Dashboard : http://localhost:${PORT}/dashboard/network`);
   console.log(` Routing Dashboard : http://localhost:${PORT}/dashboard/routing`);
   console.log(` API Endpoint      : http://localhost:${PORT}/api/telemetry`);
-  if (isHardwareMode) {
-    console.log(` Data Source       : LIVE HARDWARE (${serialBridge.portPath})`);
-  } else if (isNode1Mode) {
-    console.log(` Data Source       : NODE1 WiFi (http://${config.hardware.node1_ip}/api/telemetry)`);
-  } else {
-    console.log(` Data Source       : SIMULATOR (${simulator.intervalMs}ms interval)`);
-  }
+  console.log(` Active Sources    : ${activeSources.join(' + ')}`);
   console.log(`=======================================================`);
 });

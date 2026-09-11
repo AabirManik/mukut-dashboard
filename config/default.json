@@ -4,10 +4,10 @@
     "host": "0.0.0.0"
   },
   "hardware": {
-    "data_source": "simulator",
-    "node1_ip": "192.168.4.1",
+    "data_source": "node1",
+    "node1_ip": "192.168.14.60",
     "node1_poll_interval_ms": 1500,
-    "serial_port": "COM3",
+    "serial_port": "COM7",
     "baud_rate": 115200
   },
   "helmet": {
@@ -62,8 +62,9 @@
         "id": "link_node02_node01",
         "source": "NODE02",
         "destination": "NODE01",
-        "rssi": -68,
-        "distance": 52,
+        "rssi": null,
+        "distance": null,
+        "hide_metrics": true,
         "status": "CONNECTED",
         "available": true
       },
@@ -71,8 +72,8 @@
         "id": "link_node03_node02",
         "source": "NODE03",
         "destination": "NODE02",
-        "rssi": -70,
-        "distance": 35,
+        "rssi": -55,
+        "distance": 3.5,
         "status": "CONNECTED",
         "available": true
       },
@@ -80,8 +81,26 @@
         "id": "link_helmet_node03",
         "source": "HELMET01",
         "destination": "NODE03",
-        "rssi": -61,
-        "distance": 18,
+        "rssi": -45,
+        "distance": 0.6,
+        "status": "CONNECTED",
+        "available": true
+      },
+      {
+        "id": "link_helmet_node02",
+        "source": "HELMET01",
+        "destination": "NODE02",
+        "rssi": -55,
+        "distance": 4.4,
+        "status": "CONNECTED",
+        "available": true
+      },
+      {
+        "id": "link_helmet_node01",
+        "source": "HELMET01",
+        "destination": "NODE01",
+        "rssi": -53,
+        "distance": 9.8,
         "status": "CONNECTED",
         "available": true
       },
@@ -90,7 +109,7 @@
         "source": "NODE03",
         "destination": "NODE01",
         "rssi": -79,
-        "distance": 64,
+        "distance": 15.0,
         "status": "CONNECTED",
         "available": true
       }
@@ -100,28 +119,28 @@
     "methane": {
       "name": "Methane",
       "formula": "CH4",
-      "warning": 0.8,
-      "critical": 1.5,
-      "unit": "% vol",
-      "max_scale": 3.0,
-      "decimals": 2
+      "warning": 300,
+      "critical": 600,
+      "unit": "ppm",
+      "max_scale": 1000,
+      "decimals": 0
     },
     "carbon_monoxide": {
-      "name": "Carbon Monoxide",
-      "formula": "CO",
-      "warning": 35.0,
-      "critical": 100.0,
+      "name": "Carbon Monoxide / LPG",
+      "formula": "LPG/CO",
+      "warning": 300,
+      "critical": 600,
       "unit": "ppm",
-      "max_scale": 200.0,
+      "max_scale": 1000,
       "decimals": 0
     },
     "smoke": {
-      "name": "Smoke & Particulates",
-      "formula": "PM",
-      "warning": 150.0,
-      "critical": 300.0,
+      "name": "Smoke & Hydrogen",
+      "formula": "PM/H2",
+      "warning": 300,
+      "critical": 600,
       "unit": "ppm",
-      "max_scale": 500.0,
+      "max_scale": 1000,
       "decimals": 0
     },
     "temperature": {
@@ -136,7 +155,7 @@
       "warning": 85.0,
       "critical": 95.0,
       "unit": "%",
-      "decimals": 0
+      "decimals": 1
     }
   }
 }

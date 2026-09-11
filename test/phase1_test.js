@@ -69,28 +69,28 @@ console.log('\n[TEST GROUP 2] StateManager & Alert Logic Tests:');
     ...nominalTelemetry,
     environment: {
       ...nominalTelemetry.environment,
-      methane: 0.95 // > 0.8 warning
+      methane: 350 // > 300 warning
     }
   };
   const stateWarn = sm.processTelemetry(gasWarningTelemetry);
   assert.strictEqual(stateWarn.status, 'WARNING', 'Elevated methane should trigger WARNING');
   assert.strictEqual(stateWarn.gas_status.methane.status, 'WARNING', 'Methane status should be WARNING');
   assert.strictEqual(stateWarn.gas_status.overall, 'WARNING', 'Overall gas status should be WARNING');
-  console.log('  ✓ Elevated methane (>0.8% vol) triggers WARNING status and events');
+  console.log('  ✓ Elevated methane (>300 ppm) triggers WARNING status and events');
 
   // Test 2.3: Gas Critical Trigger
   const gasCriticalTelemetry = {
     ...nominalTelemetry,
     environment: {
       ...nominalTelemetry.environment,
-      methane: 1.80 // > 1.5 critical
+      methane: 700 // > 600 critical
     }
   };
   const stateCrit = sm.processTelemetry(gasCriticalTelemetry);
   assert.strictEqual(stateCrit.status, 'EMERGENCY', 'Critical methane should trigger EMERGENCY');
   assert.strictEqual(stateCrit.gas_status.methane.status, 'CRITICAL', 'Methane status should be CRITICAL');
   assert.strictEqual(stateCrit.gas_status.overall, 'CRITICAL', 'Overall gas status should be CRITICAL');
-  console.log('  ✓ Critical methane (>1.5% vol) triggers EMERGENCY status');
+  console.log('  ✓ Critical methane (>600 ppm) triggers EMERGENCY status');
 
   // Test 2.4: Emergency SOS Trigger
   const sosTelemetry = {
@@ -127,14 +127,14 @@ console.log('\n[TEST GROUP 3] Telemetry Simulator Tests:');
   // Gas Warning Scenario
   sim.setScenario('GAS_WARNING');
   const p2 = sim.generatePacket();
-  assert.ok(p2.environment.methane >= 0.8, 'Methane in GAS_WARNING should exceed 0.8');
-  console.log(`  ✓ GAS_WARNING scenario generated Methane=${p2.environment.methane}% vol (Warning threshold >= 0.8)`);
+  assert.ok(p2.environment.methane >= 300, 'Methane in GAS_WARNING should exceed 300');
+  console.log(`  ✓ GAS_WARNING scenario generated Methane=${p2.environment.methane} ppm (Warning threshold >= 300)`);
 
   // Gas Critical Scenario
   sim.setScenario('GAS_CRITICAL');
   const p3 = sim.generatePacket();
-  assert.ok(p3.environment.methane >= 1.5, 'Methane in GAS_CRITICAL should exceed 1.5');
-  console.log(`  ✓ GAS_CRITICAL scenario generated Methane=${p3.environment.methane}% vol (Critical threshold >= 1.5)`);
+  assert.ok(p3.environment.methane >= 600, 'Methane in GAS_CRITICAL should exceed 600');
+  console.log(`  ✓ GAS_CRITICAL scenario generated Methane=${p3.environment.methane} ppm (Critical threshold >= 600)`);
 
   // SOS Scenario
   sim.setScenario('SOS');

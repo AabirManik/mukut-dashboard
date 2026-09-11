@@ -43,6 +43,9 @@
       </div>
     </header>
 
+    <!-- Dynamic Hazard Alerts Container -->
+    <div class="alerts-container" id="alertsContainer" style="margin-bottom: 12px;"></div>
+
     <!-- Network Health & Route Callout Banner -->
     <section class="network-summary-banner" id="netSummaryBanner">
       <div class="banner-left">
@@ -82,16 +85,13 @@
           <!-- CHAIN TOPOLOGY: NODE01 <-> NODE02 <-> NODE03 <-> HELMET01 -->
           <div style="display: flex; flex-direction: column; align-items: center; width: 100%; max-width: 600px; margin: 20px auto;">
             
-            <!-- LINK: NODE02 <-> NODE01 -->
+            <!-- LINK: NODE02 <-> NODE01 (MAIN UPLINK TRUNK - NO RSSI/DIST PER GUIDELINES) -->
             <div class="topology-link-connector" id="link_node02_node01">
               <div class="link-line"></div>
               <div class="link-metrics-badge">
-                <span class="link-direction">NODE02 ◄──► NODE01</span>
+                <span class="link-direction">NODE02 ◄──► NODE01 (MAIN UPLINK)</span>
                 <div class="link-data-row">
-                  <span class="link-rssi" id="rssi_link_node02_node01">-68 dBm</span>
-                  <span class="link-sep">|</span>
-                  <span class="link-dist" id="dist_link_node02_node01">EST. 52 m</span>
-                  <span class="link-quality status-normal" id="qual_link_node02_node01">GOOD</span>
+                  <span class="link-quality status-normal" id="qual_link_node02_node01">UPLINK CONNECTED</span>
                 </div>
               </div>
             </div>
@@ -112,9 +112,9 @@
               <div class="link-metrics-badge">
                 <span class="link-direction">NODE03 ◄──► NODE02</span>
                 <div class="link-data-row">
-                  <span class="link-rssi" id="rssi_link_node03_node02">-70 dBm</span>
+                  <span class="link-rssi" id="rssi_link_node03_node02">-55 dBm</span>
                   <span class="link-sep">|</span>
-                  <span class="link-dist" id="dist_link_node03_node02">EST. 35 m</span>
+                  <span class="link-dist" id="dist_link_node03_node02">EST. 3.5 m</span>
                   <span class="link-quality status-normal" id="qual_link_node03_node02">GOOD</span>
                 </div>
               </div>
@@ -136,10 +136,38 @@
               <div class="link-metrics-badge">
                 <span class="link-direction">HELMET01 ◄──► NODE03</span>
                 <div class="link-data-row">
-                  <span class="link-rssi" id="rssi_link_helmet_node03">-61 dBm</span>
+                  <span class="link-rssi" id="rssi_link_helmet_node03">-45 dBm</span>
                   <span class="link-sep">|</span>
-                  <span class="link-dist" id="dist_link_helmet_node03">EST. 18 m</span>
+                  <span class="link-dist" id="dist_link_helmet_node03">EST. 0.6 m</span>
                   <span class="link-quality status-normal" id="qual_link_helmet_node03">EXCELLENT</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- LINK: HELMET01 <-> NODE02 (RELAY) -->
+            <div class="topology-link-connector" id="link_helmet_node02" style="margin-top: 6px;">
+              <div class="link-line" style="border-left-style: dashed;"></div>
+              <div class="link-metrics-badge">
+                <span class="link-direction">HELMET01 ◄──► NODE02 (RELAY)</span>
+                <div class="link-data-row">
+                  <span class="link-rssi" id="rssi_link_helmet_node02">-55 dBm</span>
+                  <span class="link-sep">|</span>
+                  <span class="link-dist" id="dist_link_helmet_node02">EST. 4.4 m</span>
+                  <span class="link-quality status-normal" id="qual_link_helmet_node02">ONLINE</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- LINK: HELMET01 <-> NODE01 (DIRECT) -->
+            <div class="topology-link-connector" id="link_helmet_node01" style="margin-top: 6px;">
+              <div class="link-line" style="border-left-style: dotted;"></div>
+              <div class="link-metrics-badge">
+                <span class="link-direction">HELMET01 ◄──► NODE01 (DIRECT SURFACE)</span>
+                <div class="link-data-row">
+                  <span class="link-rssi" id="rssi_link_helmet_node01">-53 dBm</span>
+                  <span class="link-sep">|</span>
+                  <span class="link-dist" id="dist_link_helmet_node01">EST. 9.8 m</span>
+                  <span class="link-quality status-normal" id="qual_link_helmet_node01">DIRECT</span>
                 </div>
               </div>
             </div>
@@ -155,6 +183,82 @@
             <div class="node-id">HELMET01</div>
             <div class="node-role">Miner Safety Helmet (Underground Stope)</div>
           </div>
+        </div>
+      </section>
+
+      <!-- 1D Spatial Proximity Solver Card -->
+      <section class="spatial-solver-card">
+        <div class="card-meta-header">
+          <span class="section-label">1D SPATIAL PROXIMITY SOLVER</span>
+          <span class="status-code">ENGINE: MUKUT RELATIVE RSSI</span>
+        </div>
+        <div class="spatial-slider-container">
+          <div class="slider-marker-helmet" id="helmetSliderMarker" style="left: 73.7%;">👷</div>
+        </div>
+        <div class="spatial-node-labels">
+          <span>[ NODE 2 ] <span id="distNode2">-- m</span></span>
+          <span>[ NODE 3 ] <span id="distNode3">-- m</span></span>
+        </div>
+        <div class="spatial-meta-footer">
+          STATIC ANCHOR SPACING: <span id="fixedDistance">-- m</span> &nbsp;|&nbsp; LAST KNOWN LOCATION: <b id="lastKnownLocation">NODE03</b>
+        </div>
+      </section>
+
+      <!-- Structural Health Monitoring Card -->
+      <section class="structural-card">
+        <div class="card-meta-header">
+          <span class="section-label">STRUCTURAL HEALTH & TUNNEL SHAKE MONITORING</span>
+          <span class="status-pill status-normal" id="structuralOverallBadge">SYSTEM STABLE</span>
+        </div>
+        <div class="structural-grid">
+          <div class="structural-node-box">
+            <div class="structural-node-title">NODE 02 RELAY STATION</div>
+            <span class="hazard-pill stable" id="hazardNode2">STABLE</span>
+          </div>
+          <div class="structural-node-box">
+            <div class="structural-node-title">NODE 03 ACCESS STATION</div>
+            <span class="hazard-pill stable" id="hazardNode3">STABLE</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Casualty Assessment & Incident Rescue Dispatch Panel -->
+      <section class="casualty-card" id="casualtyCard">
+        <div class="card-meta-header">
+          <span class="section-label">🚨 CASUALTY & INCIDENT RESCUE DISPATCH</span>
+          <span class="status-pill status-normal" id="casualtyStatusBadge">ALL STATIONS SECURE</span>
+        </div>
+        
+        <div class="casualty-grid">
+          <!-- Closest Rescue Station -->
+          <div class="casualty-box highlight">
+            <div class="casualty-box-title">PRIMARY EXTRACTION / CLOSEST RELAY GATEWAY</div>
+            <div class="rescue-node-highlight">
+              <span id="rescueClosestNodeId">NODE03</span>
+              <span class="hazard-pill stable" id="rescueClosestNodeStatus">ONLINE</span>
+            </div>
+            <div class="rescue-metrics-strip">
+              <span class="metric-pill-dark" id="rescueClosestDist">DISTANCE: 0.4 m</span>
+              <span class="metric-pill-subtle" id="rescueClosestRssi">SIGNAL: -43 dBm</span>
+            </div>
+          </div>
+
+          <!-- Secondary Active Relay & Hazard Location -->
+          <div class="casualty-box">
+            <div class="casualty-box-title">SECONDARY ACTIVE RELAY & VIBRATION LOCATOR</div>
+            <div class="rescue-node-highlight">
+              <span id="rescueSecondaryNodeId">NODE02</span>
+              <span class="hazard-pill stable" id="rescueSecondaryNodeStatus">ONLINE</span>
+            </div>
+            <div class="rescue-metrics-strip">
+              <span class="metric-pill-dark" id="rescueSecondaryDist">DISTANCE: 7.7 m</span>
+              <span class="metric-pill-subtle" id="rescueSecondaryRssi">SIGNAL: -51 dBm</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="incident-summary-banner" id="casualtyIncidentSummary">
+          ℹ️ STANDBY: No structural tilt, collapse, or SOS panic alarm active. Continuous spatial proximity tracking active.
         </div>
       </section>
 

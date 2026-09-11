@@ -87,11 +87,11 @@ export class TelemetrySimulator {
         break;
 
       case 'GAS_WARNING':
-        this.values.methane = this.walk(this.values.methane, 0.92, 1.25, 0.03, 2);
+        this.values.methane = this.walk(this.values.methane, 320, 450, 5, 0);
         break;
 
       case 'GAS_CRITICAL':
-        this.values.methane = this.walk(this.values.methane, 1.65, 2.40, 0.04, 2);
+        this.values.methane = this.walk(this.values.methane, 650, 850, 10, 0);
         break;
 
       case 'SOS':

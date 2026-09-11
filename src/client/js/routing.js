@@ -16,6 +16,23 @@
   let relativeTimer = null;
   let transitionTimer = null;
 
+
+  // ─── Tunnel Map State ───────────────────────────────────────────
+  const tunnelMap = {
+    canvas: null,
+    ctx: null,
+    // Physical position in metres from NODE02 along tunnel axis:
+    //   negative = between N1 and N2
+    //   0        = at NODE02
+    //   positive = between N2 and N3
+    //   > fixed  = past NODE03 (deeper)
+    physPos:       0,
+    targetPhysPos: 0,
+    animFrame: null,
+    nodeStates: { NODE01: 'ONLINE', NODE02: 'ONLINE', NODE03: 'ONLINE', HELMET01: 'ONLINE' },
+    links: {}        // keyed by "A|B" (sorted) → distance in metres
+  };
+
   // DOM Elements Cache
   const elements = {
     // Header & Status
@@ -154,6 +171,7 @@
     if (!state) return;
     currentState = state;
     lastSeenTimestamp = state.last_seen;
+    updateTunnelMap(state);   // ← live tunnel map update
 
     // 1. Helmet Online Status Header
     if (elements.helmetIdDisplay) elements.helmetIdDisplay.textContent = state.helmet_id || 'HELMET01';
@@ -531,6 +549,320 @@
     };
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  //  2-D TUNNEL MAP  —  canvas renderer
+  // ═══════════════════════════════════════════════════════════════
+  function initTunnelMap() {
+    tunnelMap.canvas = document.getElementById('tunnelMapCanvas');
+    if (!tunnelMap.canvas) return;
+    tunnelMap.ctx = tunnelMap.canvas.getContext('2d');
+    resizeTunnelCanvas();
+    window.addEventListener('resize', resizeTunnelCanvas);
+    animateTunnelMap();
+  }
+
+  function resizeTunnelCanvas() {
+    const c = tunnelMap.canvas;
+    if (!c) return;
+    c.width  = c.offsetWidth  * window.devicePixelRatio;
+    c.height = c.offsetHeight * window.devicePixelRatio;
+    tunnelMap.ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+  }
+
+  // Called every WebSocket state update
+  function updateTunnelMap(state) {
+    if (!state) return;
+
+    // Node online states
+    if (state.network && state.network.nodes) {
+      state.network.nodes.forEach(n => {
+        tunnelMap.nodeStates[n.id] = n.status;
+      });
+    }
+    tunnelMap.nodeStates['HELMET01'] = state.online ? 'ONLINE' : 'OFFLINE';
+
+    // ── Collect distances into links map ────────────────────────────────
+    if (state.network && state.network.links) {
+      state.network.links.forEach(l => {
+        const key = [l.source, l.destination].sort().join('|');
+        if (l.distance != null) tunnelMap.links[key] = l.distance;
+      });
+    }
+    if (state.spatial_position) {
+      const sp = state.spatial_position;
+      if (sp.dist_n2 != null && sp.dist_n2 >= 0) tunnelMap.links['HELMET01|NODE02'] = sp.dist_n2;
+      if (sp.dist_n3 != null && sp.dist_n3 >= 0) tunnelMap.links['HELMET01|NODE03'] = sp.dist_n3;
+      if (sp.fixed_dist  != null && sp.fixed_dist  > 0) tunnelMap.links['NODE02|NODE03'] = sp.fixed_dist;
+    }
+
+    // ── 1-D trilateration: compute physical position from N2 & N3 ──────────
+    //  posFromN2 = (d2² - d3² + fd²) / (2 × fd)
+    //  + = toward / past N3 ; − = toward / past N1 (surface)
+    const d2 = tunnelMap.links['HELMET01|NODE02'];
+    const d3 = tunnelMap.links['HELMET01|NODE03'];
+    const fd = tunnelMap.links['NODE02|NODE03'] || 5;
+    if (d2 != null && d3 != null) {
+      tunnelMap.targetPhysPos = (d2 * d2 - d3 * d3 + fd * fd) / (2 * fd);
+    }
+  }
+
+  // Smooth animation loop — eases physical position in metres
+  function animateTunnelMap() {
+    const diff = tunnelMap.targetPhysPos - tunnelMap.physPos;
+    if (Math.abs(diff) > 0.01) {
+      tunnelMap.physPos += diff * 0.08;
+    } else {
+      tunnelMap.physPos = tunnelMap.targetPhysPos;
+    }
+    drawTunnelMap();
+    tunnelMap.animFrame = requestAnimationFrame(animateTunnelMap);
+  }
+
+  function drawTunnelMap() {
+    const c = tunnelMap.canvas;
+    const ctx = tunnelMap.ctx;
+    if (!c || !ctx) return;
+
+    const W = c.offsetWidth;
+    const H = c.offsetHeight;
+    ctx.clearRect(0, 0, W, H);
+
+    // ── Background gradient ──────────────────────────────────────
+    const bg = ctx.createLinearGradient(0, 0, W, 0);
+    bg.addColorStop(0,   '#0a1a0e');
+    bg.addColorStop(0.5, '#060d14');
+    bg.addColorStop(1,   '#0f0a0a');
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, W, H);
+
+    // ── Tunnel walls ────────────────────────────────────────────
+    const tunnelY1 = H * 0.28;
+    const tunnelY2 = H * 0.72;
+    const wallGrad = ctx.createLinearGradient(0, tunnelY1, 0, tunnelY2);
+    wallGrad.addColorStop(0,   'rgba(60,120,80,0.18)');
+    wallGrad.addColorStop(0.5, 'rgba(20,40,30,0.08)');
+    wallGrad.addColorStop(1,   'rgba(60,120,80,0.18)');
+    ctx.fillStyle = wallGrad;
+    ctx.fillRect(0, tunnelY1, W, tunnelY2 - tunnelY1);
+
+    // Top & bottom wall lines
+    ctx.strokeStyle = 'rgba(80,160,100,0.25)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(0, tunnelY1); ctx.lineTo(W, tunnelY1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, tunnelY2); ctx.lineTo(W, tunnelY2); ctx.stroke();
+
+    // ── Node layout: NODE01=left … NODE03=right, then helmet ────
+    // Fixed screen positions for nodes (as fraction of W)
+    const nodeX = {
+      NODE01: W * 0.10,
+      NODE02: W * 0.38,
+      NODE03: W * 0.66,
+    };
+    const midY = H * 0.5;
+
+    // ══ Helmet position via 1-D trilateration ═════════════════════════════
+    //
+    //  posFromN2 = (d2² − d3² + fd²) / (2 × fd)   [metres from NODE02]
+    //
+    //  posFromN2 < 0             → miner is between N1 and N2 (toward surface)
+    //  0 ≤ posFromN2 ≤ fixedDist → miner is between N2 and N3
+    //  posFromN2 > fixedDist     → miner is deeper than N3
+    //
+    //  Screen mapping: one metre = (nodeX.NODE03 - nodeX.NODE02) / fixedDist  px
+    //  So: helmetX = nodeX.NODE02 + posFromN2 × px_per_m
+    //
+    const distN2    = tunnelMap.links['HELMET01|NODE02'] || 0;
+    const distN3    = tunnelMap.links['HELMET01|NODE03'] || 0;
+    const fixedDist = tunnelMap.links['NODE02|NODE03']   || 5;
+
+    const posFromN2    = tunnelMap.physPos;          // smoothed physical pos (metres)
+    const pxPerMetre   = (nodeX.NODE03 - nodeX.NODE02) / fixedDist;
+
+    // Raw pixel position: 0 = NODE02, fixedDist = NODE03, negative = N1-side
+    let helmetX = nodeX.NODE02 + posFromN2 * pxPerMetre;
+
+    // Hard clamp: never go past NODE01 left edge or canvas right edge
+    helmetX = Math.max(nodeX.NODE01 + 28, Math.min(W - 30, helmetX));
+
+    // Anchor node: whichever fixed node the cable connects to
+    // posFromN2 < 0 means miner is on the N1 side of N2 → cable attaches to N2
+    // posFromN2 >= 0 means miner is on the N3 side of N2 → cable attaches to N3
+    const anchorId = posFromN2 < 0 ? 'NODE02' : 'NODE03';
+
+    // ── Tunnel floor dashes (atmosphere) ────────────────────────
+    ctx.setLineDash([6, 14]);
+    ctx.strokeStyle = 'rgba(80,200,120,0.07)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(0, midY); ctx.lineTo(W, midY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // ── Draw trunk cable between nodes ──────────────────────────
+    const pairs = [
+      ['NODE01', 'NODE02'],
+      ['NODE02', 'NODE03']
+    ];
+
+    pairs.forEach(([a, b]) => {
+      const x1 = nodeX[a], x2 = nodeX[b];
+      const n1online = tunnelMap.nodeStates[a] === 'ONLINE';
+      const n2online = tunnelMap.nodeStates[b] === 'ONLINE';
+      const active = n1online && n2online;
+      const key = [a, b].sort().join('|');
+      const dist = tunnelMap.links[key];
+
+      // Cable line
+      const cableGrad = ctx.createLinearGradient(x1, 0, x2, 0);
+      if (active) {
+        cableGrad.addColorStop(0, 'rgba(34,197,94,0.55)');
+        cableGrad.addColorStop(1, 'rgba(34,197,94,0.25)');
+      } else {
+        cableGrad.addColorStop(0, 'rgba(239,68,68,0.4)');
+        cableGrad.addColorStop(1, 'rgba(239,68,68,0.2)');
+      }
+      ctx.setLineDash(active ? [] : [6, 6]);
+      ctx.strokeStyle = cableGrad;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath(); ctx.moveTo(x1, midY); ctx.lineTo(x2, midY); ctx.stroke();
+      ctx.setLineDash([]);
+
+      // Distance label above cable midpoint
+      if (dist != null) {
+        const mx = (x1 + x2) / 2;
+        ctx.font = '500 10px JetBrains Mono, monospace';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = active ? 'rgba(134,239,172,0.8)' : 'rgba(252,165,165,0.7)';
+        ctx.fillText(`${Number(dist).toFixed(1)} m`, mx, midY - 14);
+      }
+    });
+
+    // ── Cable from nearest relay node to helmet ──────────────────
+    const helmetOnline  = tunnelMap.nodeStates['HELMET01'] === 'ONLINE';
+    const anchorOnline  = tunnelMap.nodeStates[anchorId] === 'ONLINE';
+    const helmetLinkActive = helmetOnline && anchorOnline;
+    const anchorX       = nodeX[anchorId];
+
+    ctx.setLineDash(helmetLinkActive ? [] : [5, 7]);
+    ctx.strokeStyle = helmetLinkActive ? 'rgba(56,189,248,0.5)' : 'rgba(239,68,68,0.35)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(anchorX, midY); ctx.lineTo(helmetX, midY); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // Distance label for helmet ↔ anchor node
+    const anchorDistKey = ['HELMET01', anchorId].sort().join('|');
+    const anchorDist    = tunnelMap.links[anchorDistKey];
+    if (anchorDist != null) {
+      const mx = (anchorX + helmetX) / 2;
+      ctx.font = '500 10px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = helmetLinkActive ? 'rgba(125,211,252,0.85)' : 'rgba(252,165,165,0.7)';
+      ctx.fillText(`${Number(anchorDist).toFixed(1)} m`, mx, midY - 14);
+    }
+
+    // ── Draw fixed nodes ────────────────────────────────────────
+    const nodeLabels = { NODE01: 'NODE 01\nSURFACE', NODE02: 'NODE 02\nMID-TUNNEL', NODE03: 'NODE 03\nDEEP RELAY' };
+    const nodeColors = {
+      ONLINE:  { fill: '#14532d', stroke: '#22c55e', text: '#4ade80' },
+      OFFLINE: { fill: '#450a0a', stroke: '#ef4444', text: '#fca5a5' }
+    };
+
+    Object.entries(nodeX).forEach(([id, x]) => {
+      const st = tunnelMap.nodeStates[id] || 'ONLINE';
+      const col = nodeColors[st] || nodeColors.ONLINE;
+      const r = 20;
+
+      // Glow
+      const glow = ctx.createRadialGradient(x, midY, 0, x, midY, r * 2.5);
+      glow.addColorStop(0, st === 'ONLINE' ? 'rgba(34,197,94,0.18)' : 'rgba(239,68,68,0.18)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow;
+      ctx.beginPath(); ctx.arc(x, midY, r * 2.5, 0, Math.PI * 2); ctx.fill();
+
+      // Circle
+      ctx.beginPath(); ctx.arc(x, midY, r, 0, Math.PI * 2);
+      ctx.fillStyle = col.fill;
+      ctx.fill();
+      ctx.strokeStyle = col.stroke;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Node ID inside
+      ctx.font = 'bold 8px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = col.text;
+      ctx.fillText(id.replace('NODE', 'N'), x, midY + 3);
+
+      // Label below
+      const lines = (nodeLabels[id] || id).split('\n');
+      ctx.font = '500 9px Inter, sans-serif';
+      ctx.fillStyle = 'rgba(200,220,210,0.7)';
+      lines.forEach((ln, i) => ctx.fillText(ln, x, midY + r + 14 + i * 12));
+
+      // Status pill above
+      ctx.font = '600 8px JetBrains Mono, monospace';
+      ctx.fillStyle = st === 'ONLINE' ? 'rgba(74,222,128,0.9)' : 'rgba(248,113,113,0.9)';
+      ctx.fillText(st, x, midY - r - 7);
+    });
+
+    // ── Draw helmet marker ──────────────────────────────────────
+    const hCol = helmetOnline ? { stroke: '#38bdf8', fill: '#0c4a6e', glow: 'rgba(56,189,248,0.25)', text: '#7dd3fc' }
+                              : { stroke: '#ef4444', fill: '#450a0a', glow: 'rgba(239,68,68,0.2)',   text: '#fca5a5' };
+    const hr = 15;
+    const pulse = 1 + 0.06 * Math.sin(Date.now() / 400);  // subtle pulse
+
+    // Glow
+    const hGlow = ctx.createRadialGradient(helmetX, midY, 0, helmetX, midY, hr * 3 * pulse);
+    hGlow.addColorStop(0, hCol.glow);
+    hGlow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = hGlow;
+    ctx.beginPath(); ctx.arc(helmetX, midY, hr * 3 * pulse, 0, Math.PI * 2); ctx.fill();
+
+    // Helmet circle (diamond shape for distinction)
+    ctx.save();
+    ctx.translate(helmetX, midY);
+    ctx.rotate(Math.PI / 4);
+    ctx.beginPath(); ctx.rect(-hr * 0.8, -hr * 0.8, hr * 1.6, hr * 1.6);
+    ctx.fillStyle = hCol.fill; ctx.fill();
+    ctx.strokeStyle = hCol.stroke; ctx.lineWidth = 2; ctx.stroke();
+    ctx.restore();
+
+    // Helmet icon text
+    ctx.font = '11px serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = hCol.text;
+    ctx.fillText('⛑', helmetX, midY + 4);
+
+    // MINER label above
+    ctx.font = 'bold 9px JetBrains Mono, monospace';
+    ctx.fillStyle = hCol.text;
+    ctx.fillText('MINER 01', helmetX, midY - hr - 8);
+    ctx.font = '600 8px JetBrains Mono, monospace';
+    ctx.fillStyle = helmetOnline ? 'rgba(56,189,248,0.85)' : 'rgba(248,113,113,0.85)';
+    ctx.fillText(helmetOnline ? 'ONLINE' : 'OFFLINE', helmetX, midY - hr - 18);
+
+    // Real distance label below helmet
+    ctx.font = '500 9px Inter, sans-serif';
+    ctx.fillStyle = 'rgba(148,163,184,0.6)';
+    const labelDist = posFromN2 < 0
+      ? `${Math.abs(posFromN2).toFixed(1)}m from N2 (surface-side)`
+      : `${Number(distN3).toFixed(1)}m from N3`;
+    ctx.fillText(labelDist, helmetX, midY + hr + 14);
+
+    // ── Legend at top-right ──────────────────────────────────────
+    const lx = W - 12, ly = 12;
+    ctx.textAlign = 'right';
+    ctx.font = '500 9px Inter, sans-serif';
+    [
+      { col: '#22c55e', label: 'Online / Connected' },
+      { col: '#ef4444', label: 'Offline / Disconnected' },
+      { col: '#38bdf8', label: 'Miner (Helmet)' }
+    ].forEach((item, i) => {
+      ctx.fillStyle = item.col;
+      ctx.fillRect(lx - 6, ly + i * 14, 6, 6);
+      ctx.fillStyle = 'rgba(148,163,184,0.7)';
+      ctx.fillText(item.label, lx - 10, ly + i * 14 + 6);
+    });
+  }
+
   function init() {
     elements.scenarioButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -540,6 +872,8 @@
     });
 
     relativeTimer = setInterval(updateLastSeenTick, 1000);
+
+    initTunnelMap();   // ← start tunnel map canvas
 
     // Initial REST Fetch
     fetch('/api/state')

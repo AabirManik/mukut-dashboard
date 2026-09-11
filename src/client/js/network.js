@@ -33,6 +33,28 @@
     diagPacketLoss: document.getElementById('diagPacketLoss'),
     diagStatusTag: document.getElementById('diagStatusTag'),
 
+    alertsContainer: document.getElementById('alertsContainer'),
+    helmetSliderMarker: document.getElementById('helmetSliderMarker'),
+    distNode2: document.getElementById('distNode2'),
+    distNode3: document.getElementById('distNode3'),
+    fixedDistance: document.getElementById('fixedDistance'),
+    lastKnownLocation: document.getElementById('lastKnownLocation'),
+    hazardNode2: document.getElementById('hazardNode2'),
+    hazardNode3: document.getElementById('hazardNode3'),
+    structuralOverallBadge: document.getElementById('structuralOverallBadge'),
+
+    casualtyCard: document.getElementById('casualtyCard'),
+    casualtyStatusBadge: document.getElementById('casualtyStatusBadge'),
+    rescueClosestNodeId: document.getElementById('rescueClosestNodeId'),
+    rescueClosestNodeStatus: document.getElementById('rescueClosestNodeStatus'),
+    rescueClosestDist: document.getElementById('rescueClosestDist'),
+    rescueClosestRssi: document.getElementById('rescueClosestRssi'),
+    rescueSecondaryNodeId: document.getElementById('rescueSecondaryNodeId'),
+    rescueSecondaryNodeStatus: document.getElementById('rescueSecondaryNodeStatus'),
+    rescueSecondaryDist: document.getElementById('rescueSecondaryDist'),
+    rescueSecondaryRssi: document.getElementById('rescueSecondaryRssi'),
+    casualtyIncidentSummary: document.getElementById('casualtyIncidentSummary'),
+
     activeModeDisplay: document.getElementById('activeModeDisplay'),
     scenarioButtons: document.querySelectorAll('.btn-scenario')
   };
@@ -140,6 +162,7 @@
     }
 
     // 4. Update Topology Links
+    // 4. Update Topology Links
     if (Array.isArray(net.links)) {
       net.links.forEach(link => {
         const linkEl = document.getElementById(link.id);
@@ -147,11 +170,18 @@
         const distEl = document.getElementById(`dist_${link.id}`);
         const qualEl = document.getElementById(`qual_${link.id}`);
 
-        if (rssiEl) rssiEl.textContent = `${link.rssi} dBm`;
-        if (distEl) distEl.textContent = `EST. ${link.distance} m`;
-        if (qualEl) {
-          qualEl.textContent = link.status === 'DISCONNECTED' ? 'DISCONNECTED' : link.quality;
-          setStatusClass(qualEl, link.status === 'DISCONNECTED' ? 'CRITICAL' : link.quality);
+        if (link.hide_metrics || link.id === 'link_node02_node01') {
+          if (qualEl) {
+            qualEl.textContent = link.status === 'DISCONNECTED' ? 'UPLINK OFFLINE' : 'UPLINK CONNECTED';
+            setStatusClass(qualEl, link.status === 'DISCONNECTED' ? 'CRITICAL' : 'NORMAL');
+          }
+        } else {
+          if (rssiEl) rssiEl.textContent = link.status === 'DISCONNECTED' ? 'OFFLINE' : (link.rssi != null ? `${link.rssi} dBm` : 'N/A');
+          if (distEl) distEl.textContent = (link.status === 'DISCONNECTED' || link.distance == null || link.distance <= 0) ? '--' : `EST. ${link.distance} m`;
+          if (qualEl) {
+            qualEl.textContent = link.status === 'DISCONNECTED' ? 'DISCONNECTED' : link.quality;
+            setStatusClass(qualEl, link.status === 'DISCONNECTED' ? 'CRITICAL' : link.quality);
+          }
         }
 
         if (linkEl) {
@@ -167,20 +197,31 @@
       // 5. Update Link Details Table
       if (elements.linkDetailsTableBody) {
         const rowsHtml = net.links.map(l => {
+          const isDisc = l.status === 'DISCONNECTED' || l.available === false;
           let qualBadgeClass = 'status-normal';
           if (l.quality === 'WEAK' || l.quality === 'FAIR') qualBadgeClass = 'status-warning';
-          if (l.status === 'DISCONNECTED') qualBadgeClass = 'status-critical';
+          if (isDisc) qualBadgeClass = 'status-critical';
 
-          let statusBadgeClass = l.status === 'CONNECTED' ? 'status-normal' : 'status-critical';
+          let statusBadgeClass = !isDisc ? 'status-normal' : 'status-critical';
+          
+          let distStr = '--';
+          let rssiStr = 'TRUNK UPLINK';
+          let sigBar = '<span style="color:var(--accent-primary); font-size:11px; font-weight:700;">DIRECT UPLINK</span>';
+
+          if (!l.hide_metrics && l.id !== 'link_node02_node01') {
+            distStr = (!isDisc && l.distance != null && l.distance > 0) ? `EST. ${l.distance} m` : '--';
+            rssiStr = !isDisc ? (l.rssi != null ? `${l.rssi} dBm` : 'N/A') : 'N/A (Offline)';
+            sigBar = !isDisc ? renderMiniSignalBar(l.quality, l.percentage) : '<span style="color:var(--text-muted); font-size:11px;">NO SIGNAL</span>';
+          }
 
           return `
             <tr>
               <td style="font-weight: 700;">${l.source} ◄──► ${l.destination}</td>
-              <td style="font-weight: 800;">${l.rssi} dBm</td>
-              <td>${renderMiniSignalBar(l.quality, l.percentage)}</td>
-              <td>EST. ${l.distance} m</td>
-              <td><span class="status-pill ${qualBadgeClass}">${l.status === 'DISCONNECTED' ? 'OFFLINE' : l.quality}</span></td>
-              <td><span class="status-pill ${statusBadgeClass}">${l.status}</span></td>
+              <td style="font-weight: 800;">${rssiStr}</td>
+              <td>${sigBar}</td>
+              <td>${distStr}</td>
+              <td><span class="status-pill ${qualBadgeClass}">${isDisc ? 'OFFLINE' : (l.hide_metrics ? 'TRUNK' : l.quality)}</span></td>
+              <td><span class="status-pill ${statusBadgeClass}">${isDisc ? 'DISCONNECTED' : 'CONNECTED'}</span></td>
             </tr>
           `;
         }).join('');
@@ -212,6 +253,116 @@
       if (elements.diagStatusTag) {
         elements.diagStatusTag.textContent = net.health === 'GOOD' ? 'ALL SYSTEMS NOMINAL' : 'NETWORK DEGRADATION DETECTED';
         setStatusClass(elements.diagStatusTag, net.health);
+      }
+    }
+
+    // 7. Alert Banners Container (Structural & Safety Alerts)
+    if (elements.alertsContainer) {
+      let alertsHtml = '';
+      if (Array.isArray(state.active_emergencies) && state.active_emergencies.length > 0) {
+        state.active_emergencies.forEach(em => {
+          alertsHtml += `<div class="alert-banner">🚨 <b>${em.source || 'CRITICAL'}:</b> ${em.message}</div>`;
+        });
+      }
+      if (Array.isArray(state.active_alerts) && state.active_alerts.length > 0) {
+        state.active_alerts.forEach(al => {
+          alertsHtml += `<div class="alert-banner warning">⚠️ <b>${al.source || 'WARNING'}:</b> ${al.message}</div>`;
+        });
+      }
+      elements.alertsContainer.innerHTML = alertsHtml;
+    }
+
+    // 8. Spatial Proximity Solver
+    if (state.spatial_position) {
+      const sp = state.spatial_position;
+      if (elements.helmetSliderMarker) elements.helmetSliderMarker.style.left = `${sp.relative_slider_pct != null ? sp.relative_slider_pct : 50}%`;
+      if (elements.distNode2) elements.distNode2.textContent = sp.dist_n2 != null && sp.dist_n2 >= 0 ? `${sp.dist_n2.toFixed(1)} m` : '-- m';
+      if (elements.distNode3) elements.distNode3.textContent = sp.dist_n3 != null && sp.dist_n3 >= 0 ? `${sp.dist_n3.toFixed(1)} m` : '-- m';
+      if (elements.fixedDistance) elements.fixedDistance.textContent = sp.fixed_dist != null && sp.fixed_dist >= 0 ? `${sp.fixed_dist.toFixed(1)} m` : '-- m';
+      if (elements.lastKnownLocation) elements.lastKnownLocation.textContent = sp.nearest_node || 'NODE03';
+    }
+
+    // 9. Structural Health & Tunnel Shake Monitoring
+    if (state.structural_health) {
+      const sh = state.structural_health;
+      if (elements.hazardNode2 && sh.node2) {
+        elements.hazardNode2.textContent = sh.node2.status || 'STABLE';
+        elements.hazardNode2.className = `hazard-pill ${sh.node2.status === 'CRITICAL_HAZARD' ? 'critical' : (sh.node2.status === 'WARNING_SHIFT' ? 'warning' : 'stable')}`;
+      }
+      if (elements.hazardNode3 && sh.node3) {
+        elements.hazardNode3.textContent = sh.node3.status || 'STABLE';
+        elements.hazardNode3.className = `hazard-pill ${sh.node3.status === 'CRITICAL_HAZARD' ? 'critical' : (sh.node3.status === 'WARNING_SHIFT' ? 'warning' : 'stable')}`;
+      }
+      if (elements.structuralOverallBadge) {
+        const hasCrit = sh.node2?.status === 'CRITICAL_HAZARD' || sh.node3?.status === 'CRITICAL_HAZARD';
+        const hasWarn = sh.node2?.status === 'WARNING_SHIFT' || sh.node3?.status === 'WARNING_SHIFT';
+        elements.structuralOverallBadge.textContent = hasCrit ? 'HAZARD: CRITICAL COLLAPSE/VIBRATION' : (hasWarn ? 'HAZARD: WARNING SHIFT' : 'SYSTEM STABLE');
+        setStatusClass(elements.structuralOverallBadge, hasCrit ? 'CRITICAL' : (hasWarn ? 'WARNING' : 'NORMAL'));
+      }
+    }
+
+    // 10. Casualty Assessment & Incident Rescue Dispatch Panel
+    if (state.casualty_assessment) {
+      const ca = state.casualty_assessment;
+      const isIncident = ca.has_incident;
+
+      if (elements.casualtyCard) {
+        if (isIncident) {
+          elements.casualtyCard.classList.add('incident-active');
+        } else {
+          elements.casualtyCard.classList.remove('incident-active');
+        }
+      }
+
+      if (elements.casualtyStatusBadge) {
+        if (ca.is_sos) {
+          elements.casualtyStatusBadge.textContent = '🚨 SOS CASUALTY ALARM ACTIVE';
+          elements.casualtyStatusBadge.className = 'status-pill status-emergency';
+        } else if (ca.hazards && ca.hazards.length > 0) {
+          elements.casualtyStatusBadge.textContent = `⚠️ STRUCTURAL HAZARD (${ca.hazards.map(h => `${h.node_id}: ${h.status}`).join(', ')})`;
+          elements.casualtyStatusBadge.className = 'status-pill status-critical';
+        } else {
+          elements.casualtyStatusBadge.textContent = 'ALL STATIONS SECURE';
+          elements.casualtyStatusBadge.className = 'status-pill status-normal';
+        }
+      }
+
+      // Closest Rescue Node
+      if (ca.closest_node) {
+        if (elements.rescueClosestNodeId) elements.rescueClosestNodeId.textContent = `${ca.closest_node.id} (${ca.closest_node.name || 'Station'})`;
+        if (elements.rescueClosestNodeStatus) {
+          elements.rescueClosestNodeStatus.textContent = ca.closest_node.hazard || 'ONLINE';
+          elements.rescueClosestNodeStatus.className = `hazard-pill ${ca.closest_node.hazard === 'CRITICAL_HAZARD' ? 'critical' : (ca.closest_node.hazard === 'WARNING_SHIFT' ? 'warning' : 'stable')}`;
+        }
+        if (elements.rescueClosestDist) elements.rescueClosestDist.textContent = `DISTANCE: ${ca.closest_node.distance_m != null ? `${ca.closest_node.distance_m} m` : '-- m'}`;
+        if (elements.rescueClosestRssi) elements.rescueClosestRssi.textContent = `SIGNAL: ${ca.closest_node.rssi_dbm} dBm`;
+      }
+
+      // Secondary Active Node / Shaking Node
+      const secondaryNode = (ca.active_nodes || []).find(n => !ca.closest_node || n.id !== ca.closest_node.id);
+      if (secondaryNode) {
+        if (elements.rescueSecondaryNodeId) elements.rescueSecondaryNodeId.textContent = `${secondaryNode.id} (${secondaryNode.name || 'Station'})`;
+        if (elements.rescueSecondaryNodeStatus) {
+          elements.rescueSecondaryNodeStatus.textContent = secondaryNode.hazard || 'ONLINE';
+          elements.rescueSecondaryNodeStatus.className = `hazard-pill ${secondaryNode.hazard === 'CRITICAL_HAZARD' ? 'critical' : (secondaryNode.hazard === 'WARNING_SHIFT' ? 'warning' : 'stable')}`;
+        }
+        if (elements.rescueSecondaryDist) elements.rescueSecondaryDist.textContent = `DISTANCE: ${secondaryNode.distance_m != null ? `${secondaryNode.distance_m} m` : '-- m'}`;
+        if (elements.rescueSecondaryRssi) elements.rescueSecondaryRssi.textContent = `SIGNAL: ${secondaryNode.rssi_dbm} dBm`;
+      }
+
+      // Incident Summary Banner
+      if (elements.casualtyIncidentSummary) {
+        if (ca.is_sos) {
+          elements.casualtyIncidentSummary.className = 'incident-summary-banner danger';
+          elements.casualtyIncidentSummary.innerHTML = `🚨 <b>CRITICAL DISPATCH:</b> Miner 01 triggered SOS panic switch! Recommend immediate extraction via <b>${ca.closest_node ? ca.closest_node.id : 'NODE03'}</b> (Distance: ${ca.closest_node?.distance_m}m, RSSI: ${ca.closest_node?.rssi_dbm} dBm).`;
+        } else if (ca.hazards && ca.hazards.length > 0) {
+          const h = ca.hazards[0];
+          elements.casualtyIncidentSummary.className = 'incident-summary-banner danger';
+          elements.casualtyIncidentSummary.innerHTML = `⚠️ <b>STRUCTURAL HAZARD DISPATCH:</b> ${h.name} detected ${h.status}! Miner location: ${h.miner_distance_m != null ? `${h.miner_distance_m}m` : '--'} from vibrating station (RSSI: ${h.rssi_dbm} dBm). Nearest safe extraction gateway: <b>${ca.closest_node ? ca.closest_node.id : 'NODE03'}</b> (${ca.closest_node?.distance_m != null ? `${ca.closest_node.distance_m}m` : '--'}, ${ca.closest_node?.rssi_dbm} dBm).`;
+        } else {
+          elements.casualtyIncidentSummary.className = 'incident-summary-banner';
+          elements.casualtyIncidentSummary.innerHTML = `ℹ️ <b>STANDBY MONITORING:</b> All stations structurally stable. Continuous spatial proximity tracking active (${ca.nearest_location_summary}).`;
+        }
       }
     }
   }
