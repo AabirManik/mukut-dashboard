@@ -18,7 +18,7 @@ Companion documents (do not duplicate them; consult them when needed):
 
 An IoT safety-helmet monitoring system for underground coal mines: helmet + LoRa relay nodes (`NODE01`–`NODE03`) → gateway → Node.js backend → real-time web dashboard. Hackathon prototype: simulator-first architecture, hardware swappable behind a single telemetry contract.
 
-**Status:** Phases 1–6 software-complete (Phase 5 = miner route mapping, Phase 6 = RSSI distance calibration, 2026-09-12). Live helmet hardware verified via Node1 WiFi (2026-09-12).
+**Status:** Phases 1–8 software-complete (Phase 7 = ML distance estimation, Phase 8 = temporal median filter, 2026-09-12). Live helmet hardware verified via Node1 WiFi (2026-09-12).
 
 **Current runtime mode** (per `config/default.json`): `hardware.data_source = "node1"` — the backend runs the **Node1 WiFi Bridge**, polling the live surface gateway at `http://192.168.14.60/api/telemetry` every 1500 ms (helmet connected over WiFi). To return to the demo simulator, set `data_source` to `"simulator"` (or `"serial"` for USB COM7) and restart.
 
@@ -37,10 +37,12 @@ mukut-dashboard/                 (git repo, branch: main; workspace root is the 
 ├── src/
 │   ├── server/                  Node.js backend (ESM)
 │   │   ├── server.js            Express + WebSocket entry point; route table; data-source selection
-│   │   ├── stateManager.js      Core state machine: telemetry, alerts, routing engine, trajectory, watchdog
+│   │   ├── stateManager.js      Core state machine: telemetry, alerts, routing engine, trajectory, watchdog, ML inference
 │   │   ├── simulator.js         Scenario-driven telemetry, network & miner-journey simulator
 │   │   ├── trajectoryEngine.js  Phase 5: dead reckoning + beacon fusion → live 2D route map
 │   │   ├── calibrationEngine.js Phase 6: RSSI→distance model + calibration lock (display layer)
+│   │   ├── mlEstimator.js       Phase 7: ONNX Random Forest (RSSI+SNR → distance), WASM backend
+│   │   ├── signalFilter.js      Phase 8: per-link rolling median filter (spike rejection)
 │   │   ├── schema.js            MUKUT v1.0 telemetry contract validator
 │   │   ├── serialBridge.js      USB-serial ingestion (JSON or Node1 ASCII dashboard text)
 │   │   └── node1Bridge.js       Node1 surface-gateway schema translator + HTTP poller
@@ -54,7 +56,7 @@ mukut-dashboard/                 (git repo, branch: main; workspace root is the 
 ├── hardware/                    Arduino/ESP32 firmware (C++ .ino)
 │   ├── helmet_node/helmet_node.ino       Helmet transmitter (dummy sensors)
 │   └── gateway_node/gateway_node.ino     Surface gateway receiver → serial JSON
-├── test/                        Automated suites (phase1, phase2, phase2_e2e, phase4, phase5, phase6, e2e_integration)
+├── test/                        Automated suites (phase1, phase2, phase2_e2e, phase4, phase5, phase6, ml_test, filter_validation, hardware_validation, e2e_integration)
 ├── test_phase3b.js              Phase 3B E2E demo-sequence verification (repo root!)
 ├── sniff_com7.mjs               Serial debug utility: prints 80 lines from COM7, exits
 ├── reports/                     phase_1, phase_2, phase_3a, phase_3b, phase_4 reports
@@ -240,6 +242,28 @@ Fallback default IPs differ across files (`10.207.160.60` here, `10.251.147.60` 
 - `anchorDisplay()` maps helmet→node locks onto route-map beacon labels.
 - IMPORTANT: the lock is a **display layer only** — `TrajectoryEngine` always receives RAW telemetry, so miner tracking keeps moving while distances are frozen (G18).
 
+### 6.9 `src/server/mlEstimator.js` — ML distance estimator (Phase 7)
+
+- ONNX Random Forest model (`models/mukut_distance_model.onnx`, 235 KB) trained on RSSI+SNR→distance data (range 1–20 m; 30 m excluded from training).
+- **WASM backend**: uses `onnxruntime-web` (NOT `onnxruntime-node` — native binary incompatible with Node.js v24.11.1).
+- `estimateDistance(rssi, snr)` → `{ distance, confidence, inRange, model_version }`.
+- Default SNR fallback: `snr = rssi × 0.15 + 16.5` when hardware doesn't provide SNR (logged as `(default SNR)`).
+- Input validation: rejects null/NaN/Infinity RSSI, RSSI outside [-150, -20] dBm range.
+- Integrated into `stateManager.js` via async `processTelemetry()` — ML distances applied per-link before calibration display layer.
+- `calibrationEngine.setMLDistances(linkId, distance)` → `displayDistance()` uses ML when available (G21).
+- Test suite: `test/ml_test.js` (8 test groups, 30+ assertions).
+
+### 6.10 `src/server/signalFilter.js` — temporal median filter (Phase 8)
+
+- Per-link rolling median filter for RSSI spike rejection before ML inference.
+- Configurable window size: `signal_filter.window_size` in `config/default.json` (default: 5 packets).
+- `MedianFilter` class: `push(linkId, value)` → rolling buffer per link; `getFiltered(linkId)` → median of available samples; `getRaw(linkId)` → raw buffer.
+- Cold-start: uses available samples (1–window_size) without waiting for full window.
+- Applied in `stateManager.js` `processTelemetry()` before ONNX inference — filtered RSSI+SNR fed to ML.
+- Trajectory engine still receives RAW telemetry (G18/G22).
+- Test suite: `test/filter_validation.js` (25-packet comparison, raw vs filtered std dev).
+- Pipeline validation: `test/hardware_validation.js` (25 packets, 75 inferences, 100% success, no NaN/negative/crashes).
+
 ---
 
 ## 7. REST API Reference
@@ -418,6 +442,9 @@ Config is read ONCE at boot (module-level in stateManager.js). Edits require a s
 
 - `hardware/helmet_node/helmet_node.ino` — transmitter, ID `HELMET01` (logically attaches to NODE03). Sends MUKUT v1.0 JSON over LoRa. **Sensor values are DUMMY/simulated in firmware** (temp ~30.5 °C randomized, humidity ~65 %, methane 0.20, CO 15, smoke 50, sos false) — real sensors not yet wired (commented pin placeholders TEMP_PIN 32, MQ2_PIN 33, SOS_BTN 34).
 - `hardware/gateway_node/gateway_node.ino` — receiver (role NODE01 root relay). Reads LoRa packet, captures RSSI, string-splices a `network` block (single link `HELMET01→NODE03` with **real RSSI**, hardcoded distance 18 m) before the final `}`, prints newline-delimited JSON to USB serial. Emits `GATEWAY_STARTUP` / `GATEWAY_ERROR` JSON status lines. Physically 2 devices; logically mapped into the multi-node graph.
+- **`hardware/ino/node1.ino`** — ACTIVE surface gateway (WiFi `Jayjit` / AP `KAVACH_MASTER`, serves the embedded web page + `/api/telemetry`). v2: `everHeard` boot guard, STATION heartbeat parsing, exposes `helmet_link` / `helmet_rssi_db` / `helmet_snr_db` (+ `peer_rssi_db` / `peer_snr_db` on node3_relay) in the JSON — `null` when never measured.
+- **`hardware/ino/node2.ino`** — mid-tunnel relay. v2: appends true helmet-link RSSI/SNR to N2 relay packets (fields 18/19), transmits `N2,STATION,...` heartbeats every 3 s after 4 s of helmet silence, N2↔N3 RSSI lock 0.99→0.85.
+- **`hardware/ino/node3.ino`** — working-face relay. v2: appends helmet + peer measurements to N3 relay packets (fields 15–18), transmits `N3,STATION,...` heartbeats, N2 peer RSSI lock 0.99→0.85.
 - **Physically verified:** serial JSON ingestion path (software). **NOT verified:** actual ESP32→RA-02→gateway radio chain. See `reports/phase_4_report.md` §7/§17.
 
 ---
@@ -431,11 +458,15 @@ Config is read ONCE at boot (module-level in stateManager.js). Edits require a s
 | `test/phase4_test.js` | unit | Config shape (nodes/links/failover links/node1 keys); Node1Bridge translation (raw-ppm passthrough, SOS, offline cascades); telemetry endpoint; failover narrative (chain route → NODE02 failover → restore). Exits cleanly (`sm.destroy()`) |
 | `test/phase5_test.js` | unit | Tunnel geometry vs link distances; trajectory engine (trilateration first fix, dead reckoning, correction blend, resync, corridor clamp, reset); simulator journey + route_map state integration; node1Bridge motion/orientation/anchors. Exits cleanly |
 | `test/phase6_test.js` | unit | Path-loss model math; calibration ceremony (phases, averaging, lock, clear); display layer (locked/EMA/trunk passthrough/anchor display); full pipeline (model distances in state, frozen across ticks, trajectory moves while locked, RESET unlocks). Exits cleanly |
+| `test/ml_test.js` | unit | ONNX model loading; valid input inference; default SNR fallback; input validation; out-of-range detection; calibrationEngine ML integration; full pipeline integration; metadata validation |
+| `test/filter_validation.js` | unit | Per-link rolling median filter: raw vs filtered comparison (25 packets), spike rejection, cold-start behavior |
+| `test/hardware_validation.js` | integration | Simulated pipeline validation: 25 packets, 75 inferences, 100% success rate, no NaN/negative/crashes |
+| `test/v2_bridge_check.js` | unit | v2 network truth: station-alive semantics, relay-only helmet liveness, true helmet-link/peer RSSI+SNR mapping, old-firmware fallback, poll-failure demote/restore (28 assertions) |
 | `test/phase2_e2e_test.js` | E2E (**needs live server**) | REST endpoints + WebSocket stream + scenario reactions |
 | `test/e2e_integration_test.js` | E2E (**needs live server**) | Page delivery, `/api/state`, WS connect, scenario triggers (header mislabeled "Phase 1") |
 | `test_phase3b.js` (root) | E2E (**needs live server**) | All 3 pages up; full failover demo sequence via scenario API |
 
-No CI, no coverage tooling. `npm test` runs only `phase1_test.js` (Gotcha G6). All unit suites (phase 1/2/4/5/6) were 100% green as of 2026-09-12 (phase4 realigned to the raw-ppm contract, 4-link topology restored, phase5 route mapping, phase6 distance calibration); the E2E suites are deferred to the hardware-integration phase.
+No CI, no coverage tooling. `npm test` runs only `phase1_test.js` (Gotcha G6). All unit suites (phase 1/2/4/5/6/7/8) were 100% green as of 2026-09-12 (phase4 realigned to the raw-ppm contract, 4-link topology restored, phase5 route mapping, phase6 distance calibration, phase7 ML estimation, phase8 median filter); the E2E suites are deferred to the hardware-integration phase.
 
 ---
 
@@ -471,17 +502,31 @@ No CI, no coverage tooling. `npm test` runs only `phase1_test.js` (Gotcha G6). A
 - **G18 — Calibration lock is a DISPLAY layer only:** locked distances freeze link/spatial/beacon-label values everywhere, but `TrajectoryEngine` always consumes raw telemetry — FOLLOW MINER and the plotted path keep moving while distances are frozen. Never feed display distances into the trajectory.
 - **G19 — Trunk guard is by link ID:** the simulator emits trunk (`link_node02_node01`) RSSI −68 WITHOUT the `hide_metrics` flag (only the config/state link carries it), so `calibrationEngine.displayDistance` skips the trunk by id — the same convention the client renderers use.
 - **G20 — Path-loss constants are bench-tuned, not geometry-tuned:** with defaults (A −55, n 2.8), simulator-mode model distances (≈1.6/3.4/7.3 m) intentionally differ from the narrative geometry (18/35/64 m). Tune `calibration.path_loss` per environment; the lock freezes whatever the model says.
+- **G21 — ML distances go through calibration display layer:** `calibrationEngine.setMLDistances(linkId, distance)` stores ML results; `displayDistance()` returns ML when available, otherwise falls back to path-loss model. Trajectory engine always gets RAW telemetry (G18).
+- **G22 — Median filter before ML, RAW to trajectory:** `signalFilter` runs before ONNX inference in `processTelemetry()` — filtered RSSI+SNR fed to ML. Trajectory engine still receives unfiltered telemetry (G18).
+- **G23 — ONNX via WASM:** `onnxruntime-node` is incompatible with Node.js v24.11.1 (`CPUExecutionProvider` not found). Use `onnxruntime-web` with WASM backend instead.
+- **G24 — Default SNR fallback:** when hardware doesn't provide SNR, use `snr = rssi × 0.15 + 16.5`. Logged as `(default SNR)`. This is a placeholder until real hardware provides SNR.
+- **G25 — processTelemetry is now async:** callers must `await` the result. Simulator `tick()` is fire-and-forget (acceptable). Tests updated accordingly.
+- **G26 — Gateway-unreachable demotion:** after 3 consecutive poll failures `node1Bridge._demoteAllNodes()` marks ALL nodes OFFLINE + ALL links DISCONNECTED (gated by `demoted`, fires once per outage). The next successful `translate()` auto-restores. Without this, failed polls left the dashboard showing config-default ONLINE nodes + static distances (the "phantom ONLINE / hardcoded distance" display).
+- **G27 — Firmware boot false-positive:** `millis() - 0 < OFFLINE_TIMEOUT` is TRUE for the first 5 s after power-on, so `lastXTime = 0` initialization made every node report `online: true` with zero packets. node1.ino v2 gates all online checks with `everHeard` flags — any NEW online check must include the everHeard guard (API handler, serial dashboard, and any future one).
+- **G28 — v2 packet field map (backward compatible):** N2 relay packet: 18=helmet SNR, 19=helmet RSSI (a relay packet implies `helmet_link=true`). N3 relay packet: 15=helmet SNR, 16=node2 SNR, 17=helmet RSSI, 18=node2 RSSI. STATION heartbeats carry NO helmet payload — node1 MUST `return` before its generic helmet-field parsing or `dWorker`/`dStatus`/sensors get corrupted by heartbeat fields. Missing fields parse as 0 → gateway emits JSON `null` → bridge falls back to trunk values.
+- **G29 — Trunk vs helmet-link telemetry:** gateway `node2_relay/node3_relay.rssi_dbm`+`snr_db` are the N2→N1 / N3→N1 trunk values heard by node1's own radio (via `LoRa.packetRssi/Snr`), NOT the helmet-link values. The true helmet-link measurements are `helmet_rssi_db`/`helmet_snr_db` (feature-detected in `node1Bridge.translate()`; absent on old firmware → trunk fallback). `link_node03_node02` uses node3's `peer_rssi_db`/`peer_snr_db` (node3's radio view of node2) when present.
+- **G30 — Station heartbeats (demo semantics):** node2/node3 transmit `N2/N3,STATION,...` every 3 s after 4 s of helmet silence → powered stations stay ONLINE on the dashboard while helmet links show DISCONNECTED. HELMET01 is ONLINE when heard directly OR any relay reports `helmet_link: true` (deep-tunnel relay-only operation keeps the helmet "alive").
+- **G31 — N2↔N3 RSSI lock was 0.99 (frozen):** the near-total smoothing lock froze the N2↔N3 distance at its first value ("hardcoded distance" symptom). Now 0.85 on both node2 (rssiNode3) and node3 (rssiNode2); the peer link stays fresh via STATION heartbeats even without helmet traffic. The bypass link `link_node03_node01` is maintained by node1Bridge (status/available follow node3 station liveness; config-layer metrics untouched).
 
 ---
 
 ## 17. Current Status & Next Steps
 
-- Software Phases 1–6 complete and regression-tested (schema/safety, network, routing/failover, hardware ingestion, route mapping, distance calibration).
+- Software Phases 1–9 complete and regression-tested (schema/safety, network, routing/failover, hardware ingestion, route mapping, distance calibration, ML distance estimation, temporal median filter, v2 network truth).
+- **Phase 9 (2026-09-13): v2 network truth** — killed the phantom-ONLINE display: `node1Bridge` poll-failure demotion (3 strikes → all OFFLINE, auto-restore), NODE01 status sync, helmet relay-liveness (ONLINE via direct OR relay `helmet_link`), true helmet-link/peer RSSI+SNR mapping (feature-detected, old-firmware fallback), bypass-link maintenance. Firmware v2 (requires re-flash of node1/2/3): `everHeard` boot guard, STATION heartbeats every 3 s (stations stay ONLINE without helmet), v2 relay packet fields, N2↔N3 RSSI lock 0.99→0.85 (unfroze the "hardcoded" distance). `test/v2_bridge_check.js` 28/28; all 8 unit suites 100% green.
 - Live mode: node1 WiFi — helmet hardware connected via the surface gateway (`192.168.14.60`), verified 2026-09-12; switch back to the demo simulator with `data_source: "simulator"` + restart.
 - **2026-09-12 session:** switched to simulator mode; made `data_source` the single source toggle in `server.js`; restored the 4-link narrative topology in config (Node1 bridge re-appends its direct links at runtime); `network.js` now hides absent topology blocks; phase2/phase4 tests realigned (link count ≥4, raw-ppm passthrough, clean exit). All unit suites 100% green; server verified live on localhost:3000 (NORMAL scenario, chain route, health GOOD).
 - **Phase 5 (2026-09-12):** miner route mapping implemented — `trajectoryEngine.js` (dead reckoning + Gauss-Newton beacon fusion + corridor clamp), simulator journey scenarios (`MINER_WALK_IN/OUT/STATIONARY`), 4th dashboard tab `/dashboard/routemap`, `route_map` state block, node1Bridge motion/orientation/anchors mapping. All unit suites (1/2/4/5) 100% green.
 - **Phase 6 (2026-09-12):** RSSI distance calibration — `calibrationEngine.js` (path-loss model, EMA live distances, 5 s/link sampling ceremony, lock), `POST/GET /api/calibrate`, CALIBRATE DISTANCES control on the network page, `DIST: LIVE/LOCKED` badges on all four dashboards; display-layer-only lock (trajectory stays raw). All unit suites (1/2/4/5/6) 100% green.
+- **Phase 7 (2026-09-12):** ML distance estimation — `mlEstimator.js` (ONNX Random Forest via WASM, RSSI+SNR→distance, MAE 0.51m, R² 0.97), integration in `stateManager.js` (async `processTelemetry`), ML branch in `calibrationEngine.displayDistance()`, SNR extraction in `node1Bridge.js`, SNR in simulator/config. All unit suites (1/2/4/5/6/7) 100% green.
+- **Phase 8 (2026-09-12):** temporal median filter — `signalFilter.js` (per-link rolling median, configurable window size), applied before ONNX inference in `stateManager.js`, `test/filter_validation.js` (25-packet comparison), `test/hardware_validation.js` (25 packets, 75 inferences, 100% success). All unit suites (1/2/4/5/6/7/8) 100% green.
 - E2E suites (phase2_e2e, e2e_integration, test_phase3b) intentionally deferred until the hardware-integration phase — run them against a live server then.
-- Next up: further feature work on the live node1 hardware (route mapping + calibration complete); E2E suites still deferred.
-- Outstanding: compass→map heading calibration (`trajectory.heading_offset_deg`) before trusting hardware-driven paths; NODE03 anchor reports 0.0 m until the gateway firmware sends a positive range; gateway payload contains stray non-ASCII chars in `worker_id`/`status` (displays as-is, SOS parsing unaffected).
+- Next up: hardware validation with live LoRa packets; frontend display of ML distance (separate from theoretical); NODE03 anchor distance is 0.0 from gateway until firmware reports valid range.
+- Outstanding: compass→map heading calibration (`trajectory.heading_offset_deg`) before trusting hardware-driven paths; gateway payload contains stray non-ASCII chars in `worker_id`/`status` (displays as-is, SOS parsing unaffected).
 - Product scope guardrails (no auth, no cloud, no ML, etc.) live in `context.md` §22 — respect them.

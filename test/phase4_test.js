@@ -191,7 +191,7 @@ console.log('\n[TEST GROUP 2] Node1 Bridge Translator:');
   console.log('  ✓ Translated packet passes MUKUT v1.0 schema validation');
 
   // 2.8: Translated packet processes through StateManager
-  const result = sm.processTelemetry(translated);
+  const result = await sm.processTelemetry(translated);
   assert.ok(result, 'StateManager returns result');
   assert.ok(result.status, 'Result has status field');
   assert.ok(result.network.route, 'Result has network route');
@@ -252,7 +252,7 @@ console.log('\n[TEST GROUP 4] Full Pipeline (Node1 → StateManager → State):'
   const translated = bridge.translate(node1Payload);
   assert.strictEqual(validateTelemetry(translated).valid, true);
 
-  const state = sm.processTelemetry(translated);
+  const state = await sm.processTelemetry(translated);
   assert.strictEqual(state.status, 'SAFE');
   assert.strictEqual(state.online, true);
   assert.ok(state.environment.temperature === 33.0);
@@ -263,7 +263,7 @@ console.log('\n[TEST GROUP 4] Full Pipeline (Node1 → StateManager → State):'
   const sosPayload = JSON.parse(JSON.stringify(node1Payload));
   sosPayload.miner.status = 'SOS EMERGENCY';
   const sosTranslated = bridge.translate(sosPayload);
-  const sosState = sm.processTelemetry(sosTranslated);
+  const sosState = await sm.processTelemetry(sosTranslated);
   assert.strictEqual(sosState.sos, true);
   assert.strictEqual(sosState.status, 'EMERGENCY');
   console.log('  ✓ SOS through full pipeline → EMERGENCY status');
@@ -273,7 +273,7 @@ console.log('\n[TEST GROUP 4] Full Pipeline (Node1 → StateManager → State):'
   gasPayload.miner.status = 'SAFE';
   gasPayload.environment.mq4_methane_ppm = 1800;
   const gasTranslated = bridge.translate(gasPayload);
-  const gasState = sm.processTelemetry(gasTranslated);
+  const gasState = await sm.processTelemetry(gasTranslated);
   assert.ok(gasState.gas_status.overall !== 'NORMAL', `Gas status: ${gasState.gas_status.overall}`);
   console.log(`  ✓ Gas warning through full pipeline → atmosphere ${gasState.gas_status.overall}`);
   sm.destroy();

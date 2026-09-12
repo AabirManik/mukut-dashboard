@@ -235,7 +235,7 @@ console.log('\n[TEST GROUP 4] State & Bridge Integration:');
     ]
   };
 
-  const state = sm.processTelemetry(packet);
+  const state = await sm.processTelemetry(packet);
   assert.ok(state.route_map && state.route_map.tracking, 'getFullState must expose route_map');
   assert.ok(state.route_map.tunnel.length === 4, 'route_map carries the tunnel polyline');
   assert.ok(state.route_map.anchors.length === 3, 'route_map echoes anchor beacons');

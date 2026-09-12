@@ -1,0 +1,26 @@
+{
+  "model_name": "MUKUT Distance Estimator",
+  "model_type": "RandomForestRegressor",
+  "framework": "scikit-learn",
+  "features": ["rssi_dbm", "snr_db"],
+  "feature_order": ["RSSI (dBm)", "SNR (dB)"],
+  "target": "distance_m",
+  "training_distances_m": [1, 2, 3, 5, 10, 15, 20],
+  "validated_range_m": { "min": 1, "max": 20 },
+  "excluded_data": "30m measurements intentionally excluded",
+  "performance": {
+    "MAE": 0.5095,
+    "RMSE": 1.1044,
+    "R_squared": 0.9667
+  },
+  "preprocessing": "None — raw RSSI and SNR fed directly as float32[2]",
+  "input_shape": [1, 2],
+  "output_shape": [1, 1],
+  "conversion": "scikit-learn joblib → ONNX (skl2onnx, target_opset=14)",
+  "notes": [
+    "ML distances replace path-loss model in display layer only",
+    "Trajectory engine always receives RAW telemetry",
+    "30m not in training set — do not claim accuracy beyond 20m",
+    "SNR defaults to RSSI-derived estimate until hardware sends real SNR"
+  ]
+}

@@ -32,6 +32,7 @@ export class CalibrationEngine {
     this.lockedAt = null;
     this.locked = {}; // linkId -> { rssi_avg, distance }
     this.ema = {};    // linkId -> smoothed live distance
+    this.mlDistances = {}; // linkId -> { distance, method, snr, defaultSnr, inRange }
   }
 
   rssiToDistance(rssi) {
@@ -118,7 +119,11 @@ export class CalibrationEngine {
     }
   }
 
-  // Display distance for a link: locked value, else live model (EMA), else original.
+  setMLDistances(mlMap) {
+    this.mlDistances = mlMap || {};
+  }
+
+  // Display distance for a link: locked value, else ML model, else live path-loss (EMA), else original.
   // The trunk uplink (NODE02—NODE01) carries no metrics by design — telemetry
   // links from the simulator lack the hide_metrics flag, so guard by id too
   // (same convention as the client renderers).
@@ -126,7 +131,23 @@ export class CalibrationEngine {
     if (this.status === 'LOCKED' && this.locked[link.id]) {
       return this.locked[link.id].distance;
     }
+    // An offline link must never show a model-derived "live" distance
+    if (link.status === 'DISCONNECTED' || link.available === false) {
+      return link.distance;
+    }
+    // A live gateway-computed distance always takes priority over the ONNX
+    // estimate: field captures (test/hw_live.log) show the model saturating at
+    // 1–2 m across the measured -40…-79 dBm band while the gateway distance
+    // changes with physical movement. ONNX remains the fallback for links
+    // that report RSSI but no distance.
+    if (link.distance != null && Number.isFinite(link.distance) && link.distance > 0) {
+      return Number(link.distance.toFixed(1));
+    }
     if (link.rssi != null && !link.hide_metrics && link.id !== 'link_node02_node01') {
+      const ml = this.mlDistances[link.id];
+      if (ml && ml.distance != null && ml.method === 'ml') {
+        return this.clampDistance(ml.distance);
+      }
       const raw = this.clampDistance(this.rssiToDistance(link.rssi));
       const prev = this.ema[link.id];
       const smoothed = prev == null ? raw : prev + (raw - prev) * this.emaAlpha;

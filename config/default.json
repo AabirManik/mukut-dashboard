@@ -76,6 +76,7 @@
         "source": "NODE03",
         "destination": "NODE02",
         "rssi": -55,
+        "snr": 8.0,
         "distance": 3.5,
         "status": "CONNECTED",
         "available": true
@@ -85,6 +86,7 @@
         "source": "HELMET01",
         "destination": "NODE03",
         "rssi": -45,
+        "snr": 10.0,
         "distance": 0.6,
         "status": "CONNECTED",
         "available": true
@@ -94,6 +96,7 @@
         "source": "NODE03",
         "destination": "NODE01",
         "rssi": -79,
+        "snr": 4.1,
         "distance": 15.0,
         "status": "CONNECTED",
         "available": true
@@ -119,6 +122,9 @@
       "exponent_n": 2.8
     },
     "smoothing_ema": 0.25
+  },
+  "signal_filter": {
+    "window_size": 5
   },
   "thresholds": {
     "methane": {

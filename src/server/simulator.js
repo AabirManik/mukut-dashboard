@@ -28,10 +28,10 @@ export class TelemetrySimulator {
 
     // Network baseline values (4 links: chain HELMET01->NODE03->NODE02->NODE01 + bypass NODE03->NODE01)
     this.networkLinks = {
-      link_helmet_node03: { rssi: -61, distance: 18, status: 'CONNECTED', available: true },
-      link_node03_node02: { rssi: -70, distance: 35, status: 'CONNECTED', available: true },
-      link_node02_node01: { rssi: -68, distance: 52, status: 'CONNECTED', available: true },
-      link_node03_node01: { rssi: -79, distance: 64, status: 'CONNECTED', available: true }
+      link_helmet_node03: { rssi: -61, snr: 8.5, distance: 18, status: 'CONNECTED', available: true },
+      link_node03_node02: { rssi: -70, snr: 6.2, distance: 35, status: 'CONNECTED', available: true },
+      link_node02_node01: { rssi: -68, snr: 7.0, distance: 52, status: 'CONNECTED', available: true },
+      link_node03_node01: { rssi: -79, snr: 4.1, distance: 64, status: 'CONNECTED', available: true }
     };
 
     // Route mapping: miner journey along the tunnel polyline (map frame from config)
@@ -69,20 +69,25 @@ export class TelemetrySimulator {
         this.values.sos = false;
 
         this.networkLinks.link_helmet_node03.rssi = Math.round(this.walk(this.networkLinks.link_helmet_node03.rssi, -65, -58, 0.8, 0));
+        this.networkLinks.link_helmet_node03.snr = Number(this.walk(this.networkLinks.link_helmet_node03.snr, 7.0, 10.0, 0.3, 1));
         this.networkLinks.link_helmet_node03.status = 'CONNECTED';
 
         this.networkLinks.link_node03_node02.rssi = Math.round(this.walk(this.networkLinks.link_node03_node02.rssi, -74, -66, 0.8, 0));
+        this.networkLinks.link_node03_node02.snr = Number(this.walk(this.networkLinks.link_node03_node02.snr, 5.0, 8.0, 0.3, 1));
         this.networkLinks.link_node03_node02.status = 'CONNECTED';
 
         this.networkLinks.link_node02_node01.rssi = Math.round(this.walk(this.networkLinks.link_node02_node01.rssi, -71, -65, 0.8, 0));
+        this.networkLinks.link_node02_node01.snr = Number(this.walk(this.networkLinks.link_node02_node01.snr, 6.0, 9.0, 0.3, 1));
         this.networkLinks.link_node02_node01.status = 'CONNECTED';
 
         this.networkLinks.link_node03_node01.rssi = Math.round(this.walk(this.networkLinks.link_node03_node01.rssi, -83, -76, 0.8, 0));
+        this.networkLinks.link_node03_node01.snr = Number(this.walk(this.networkLinks.link_node03_node01.snr, 3.0, 6.0, 0.3, 1));
         this.networkLinks.link_node03_node01.status = 'CONNECTED';
         break;
 
       case 'WEAK_LINK':
         this.networkLinks.link_helmet_node03.rssi = Math.round(this.walk(this.networkLinks.link_helmet_node03.rssi, -89, -86, 0.8, 0)); // WEAK
+        this.networkLinks.link_helmet_node03.snr = Number(this.walk(this.networkLinks.link_helmet_node03.snr, 1.0, 3.0, 0.3, 1));
         break;
 
       case 'NODE02_OFFLINE':
@@ -284,10 +289,10 @@ export class TelemetrySimulator {
         temperature: 30.2, humidity: 68.0, methane: 0.22, carbon_monoxide: 16.0, smoke: 52.0, sos: false
       };
       this.networkLinks = {
-        link_helmet_node03: { rssi: -61, distance: 18, status: 'CONNECTED', available: true },
-        link_node03_node02: { rssi: -70, distance: 35, status: 'CONNECTED', available: true },
-        link_node02_node01: { rssi: -68, distance: 52, status: 'CONNECTED', available: true },
-        link_node03_node01: { rssi: -79, distance: 64, status: 'CONNECTED', available: true }
+        link_helmet_node03: { rssi: -61, snr: 8.5, distance: 18, status: 'CONNECTED', available: true },
+        link_node03_node02: { rssi: -70, snr: 6.2, distance: 35, status: 'CONNECTED', available: true },
+        link_node02_node01: { rssi: -68, snr: 7.0, distance: 52, status: 'CONNECTED', available: true },
+        link_node03_node01: { rssi: -79, snr: 4.1, distance: 64, status: 'CONNECTED', available: true }
       };
       this.resetJourney();
       // If restore, we set node online explicitly

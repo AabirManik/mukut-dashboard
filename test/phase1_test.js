@@ -58,7 +58,7 @@ console.log('\n[TEST GROUP 2] StateManager & Alert Logic Tests:');
     },
     safety: { sos: false }
   };
-  const stateNominal = sm.processTelemetry(nominalTelemetry);
+  const stateNominal = await sm.processTelemetry(nominalTelemetry);
   assert.strictEqual(stateNominal.status, 'SAFE', 'Nominal environment should yield SAFE status');
   assert.strictEqual(stateNominal.gas_status.overall, 'NORMAL', 'Gas status should be NORMAL');
   assert.strictEqual(stateNominal.online, true, 'Helmet should be ONLINE');
@@ -72,7 +72,7 @@ console.log('\n[TEST GROUP 2] StateManager & Alert Logic Tests:');
       methane: 350 // > 300 warning
     }
   };
-  const stateWarn = sm.processTelemetry(gasWarningTelemetry);
+  const stateWarn = await sm.processTelemetry(gasWarningTelemetry);
   assert.strictEqual(stateWarn.status, 'WARNING', 'Elevated methane should trigger WARNING');
   assert.strictEqual(stateWarn.gas_status.methane.status, 'WARNING', 'Methane status should be WARNING');
   assert.strictEqual(stateWarn.gas_status.overall, 'WARNING', 'Overall gas status should be WARNING');
@@ -86,7 +86,7 @@ console.log('\n[TEST GROUP 2] StateManager & Alert Logic Tests:');
       methane: 700 // > 600 critical
     }
   };
-  const stateCrit = sm.processTelemetry(gasCriticalTelemetry);
+  const stateCrit = await sm.processTelemetry(gasCriticalTelemetry);
   assert.strictEqual(stateCrit.status, 'EMERGENCY', 'Critical methane should trigger EMERGENCY');
   assert.strictEqual(stateCrit.gas_status.methane.status, 'CRITICAL', 'Methane status should be CRITICAL');
   assert.strictEqual(stateCrit.gas_status.overall, 'CRITICAL', 'Overall gas status should be CRITICAL');
@@ -97,7 +97,7 @@ console.log('\n[TEST GROUP 2] StateManager & Alert Logic Tests:');
     ...nominalTelemetry,
     safety: { sos: true }
   };
-  const stateSos = sm.processTelemetry(sosTelemetry);
+  const stateSos = await sm.processTelemetry(sosTelemetry);
   assert.strictEqual(stateSos.status, 'EMERGENCY', 'SOS active must trigger EMERGENCY');
   assert.strictEqual(stateSos.sos, true, 'SOS flag must be true');
   console.log('  ✓ Hardware SOS active immediately forces EMERGENCY state');

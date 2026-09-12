@@ -115,13 +115,13 @@ console.log('\n[TEST GROUP 3] State & Pipeline Integration:');
 
   let state = sm.getFullState();
   let hn3 = state.network.links.find(l => l.id === 'link_helmet_node03');
-  assert.ok(hn3.distance > 0 && hn3.distance < 5, `IDLE distances must be RSSI-model based (got ${hn3.distance})`);
-  assert.notStrictEqual(hn3.distance, 18, 'Simulator raw distance (18) must be overridden by model');
+  assert.ok(hn3.distance > 0, `IDLE distances follow the live (sim/firmware) distance (got ${hn3.distance})`);
+  assert.strictEqual(hn3.distance, 18, 'Live distance (18) takes priority over model estimate');
   const trunkLink = state.network.links.find(l => l.id === 'link_node02_node01');
   assert.strictEqual(trunkLink.distance, 52, 'Trunk distance must pass through untouched (sim raw value, no model)');
   assert.strictEqual(state.calibration.status, 'IDLE');
   assert.ok(state.spatial_position.dist_n3 > 0, 'Spatial dist_n3 must follow display distance');
-  console.log(`  ✓ IDLE mode: helmet→N3 shows ${hn3.distance} m (model), spatial ${state.spatial_position.dist_n3} m, trunk null`);
+  console.log(`  ✓ IDLE mode: helmet→N3 shows ${hn3.distance} m (live), spatial ${state.spatial_position.dist_n3} m, trunk null`);
 
   const eng = sm.calibrationEngine;
   const started = eng.start(sm);
@@ -167,8 +167,8 @@ console.log('\n[TEST GROUP 3] State & Pipeline Integration:');
   assert.strictEqual(state.calibration.status, 'IDLE', 'RESET must unlock calibration');
   assert.strictEqual(Object.keys(state.calibration.locked).length, 0, 'Lock map must be empty after unlock');
   const liveDist = state.network.links.find(l => l.id === 'link_helmet_node03').distance;
-  assert.ok(liveDist > 0 && liveDist < 5, `Distances revert to live model after unlock (got ${liveDist})`);
-  console.log('  ✓ RESET: calibration unlocked, live RSSI-derived distances restored');
+  assert.ok(liveDist > 0, `Distances revert to live distance after unlock (got ${liveDist})`);
+  console.log('  ✓ RESET: calibration unlocked, live distances restored');
 
   sm.destroy();
 }

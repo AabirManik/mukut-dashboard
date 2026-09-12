@@ -3,6 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { TrajectoryEngine } from './trajectoryEngine.js';
 import { CalibrationEngine } from './calibrationEngine.js';
+import { MLEstimator } from './mlEstimator.js';
+import { SignalFilter } from './signalFilter.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const configPath = path.resolve(__dirname, '../../config/default.json');
@@ -58,6 +60,15 @@ export class StateManager {
 
     // Phase 6: RSSI distance calibration engine (same pre-init requirement)
     this.calibrationEngine = new CalibrationEngine(this.config);
+
+    // Phase 7: ML distance estimator (ONNX Random Forest — async init)
+    this.mlEstimator = new MLEstimator();
+    this.mlEstimator.init().catch(err => {
+      console.error('[ML] Estimator init failed:', err.message);
+    });
+
+    // Phase 8: Temporal median filter for RSSI/SNR before ML inference
+    this.signalFilter = new SignalFilter(this.config);
 
     // Phase 2 + Phase 3A: Network & Route State Initialization
     this.initNetworkState();
@@ -339,13 +350,24 @@ export class StateManager {
         let link = this.links.find(l => l.id === update.id || (l.source === update.source && l.destination === update.destination));
         if (link) {
           if (update.rssi !== undefined) {
-            link.rssi = update.rssi;
-            const evalRssi = this.evaluateRssi(link.rssi);
-            link.quality = evalRssi.quality;
-            link.percentage = evalRssi.percentage;
+            if (typeof update.rssi === 'number' && Number.isFinite(update.rssi)) {
+              link.rssi = update.rssi;
+              const evalRssi = this.evaluateRssi(link.rssi);
+              link.quality = evalRssi.quality;
+              link.percentage = evalRssi.percentage;
+            } else {
+              // No valid reading this packet — never fabricate quality
+              // (evaluateRssi(null) would coerce null→0 and report "EXCELLENT").
+              link.rssi = null;
+              link.quality = 'N/A';
+              link.percentage = null;
+            }
           }
           if (update.distance !== undefined) {
             link.distance = update.distance;
+          }
+          if (update.snr !== undefined) {
+            link.snr = update.snr;
           }
           if (update.status !== undefined && link.status !== update.status) {
             link.status = update.status;
@@ -356,12 +378,14 @@ export class StateManager {
             topologyChanged = true;
           }
         } else {
-          const evalRssi = this.evaluateRssi(update.rssi !== undefined ? update.rssi : -75);
+          const hasRssi = typeof update.rssi === 'number' && Number.isFinite(update.rssi);
+          const evalRssi = hasRssi ? this.evaluateRssi(update.rssi) : { quality: 'N/A', percentage: null };
           this.links.push({
             id: update.id || `link_${update.source}_${update.destination}`.toLowerCase(),
             source: update.source,
             destination: update.destination,
-            rssi: update.rssi !== undefined ? update.rssi : -75,
+            rssi: hasRssi ? update.rssi : null,
+            snr: update.snr !== undefined ? update.snr : null,
             distance: update.distance !== undefined ? update.distance : null,
             status: update.status || 'CONNECTED',
             available: update.available !== undefined ? update.available : true,
@@ -427,7 +451,7 @@ export class StateManager {
     this.notifyListeners('STATE_UPDATE', this.getFullState());
   }
 
-  processTelemetry(telemetry) {
+  async processTelemetry(telemetry) {
     const now = Date.now();
     const wasOnline = this.online;
     const prevStatus = this.status;
@@ -503,8 +527,8 @@ export class StateManager {
 
     if (this.sos && !prevSos) {
       const assessment = this.computeCasualtyAssessment();
-      const closestInfo = assessment.closest_node ? `Closest Extraction Station: ${assessment.closest_node.id} (${assessment.closest_node.distance_m != null ? `${assessment.closest_node.distance_m}m` : '--'}, RSSI: ${assessment.closest_node.rssi_dbm} dBm)` : 'SURFACE GATEWAY';
-      const altNodes = assessment.active_nodes.filter(n => !assessment.closest_node || n.id !== assessment.closest_node.id).map(n => `${n.id}: ${n.distance_m != null ? `${n.distance_m}m` : '--'} (${n.rssi_dbm} dBm)`).join(', ');
+      const closestInfo = assessment.closest_node ? `Closest Extraction Station: ${assessment.closest_node.id} (${assessment.closest_node.distance_m != null ? `${assessment.closest_node.distance_m}m` : '--'}, RSSI: ${assessment.closest_node.rssi_dbm != null ? `${assessment.closest_node.rssi_dbm} dBm` : 'N/A'})` : 'SURFACE GATEWAY';
+      const altNodes = assessment.active_nodes.filter(n => !assessment.closest_node || n.id !== assessment.closest_node.id).map(n => `${n.id}: ${n.distance_m != null ? `${n.distance_m}m` : '--'} (${n.rssi_dbm != null ? `${n.rssi_dbm} dBm` : 'N/A'})`).join(', ');
       this.addEvent('EMERGENCY', `🚨 [EMERGENCY SOS DISPATCH] Miner 01 pressed panic switch! ${closestInfo}${altNodes ? ` | Alt: ${altNodes}` : ''}`);
     } else if (!this.sos && prevSos) {
       this.addEvent('INFO', `SOS alert cleared on ${this.helmetId}`);
@@ -562,7 +586,34 @@ export class StateManager {
         this.connectedNode = telemetry.network.connected_node;
       }
       if (Array.isArray(telemetry.network.links)) {
-        this.updateNetworkTelemetry(this.calibrationEngine.applyToLinks(telemetry.network.links));
+        const links = telemetry.network.links;
+        if (this.mlEstimator.isReady()) {
+          const mlMap = {};
+          const inferencePromises = links.map(async (link) => {
+            if (link.rssi != null && link.status !== 'DISCONNECTED' && !link.hide_metrics && link.id !== 'link_node02_node01') {
+              const rawRssi = link.rssi;
+              const rawSnr = link.snr ?? null;
+
+              this.signalFilter.push(link.id, rawRssi, rawSnr);
+              const filtered = this.signalFilter.getFiltered(link.id);
+
+              const result = await this.mlEstimator.estimateDistance(filtered.rssi, filtered.snr);
+              result.rawRssi = rawRssi;
+              result.rawSnr = rawSnr;
+              result.filteredRssi = filtered.rssi;
+              result.filteredSnr = filtered.snr;
+              mlMap[link.id] = result;
+
+              if (result.method === 'ml' && result.distance != null) {
+                const snrInfo = result.defaultSnr ? ' (default SNR)' : '';
+                console.log(`[ML] ${link.source}→${link.destination}: Raw RSSI=${rawRssi} SNR=${rawSnr} → Filtered RSSI=${filtered.rssi} SNR=${filtered.snr}${snrInfo} | ML=${result.distance} m`);
+              }
+            }
+          });
+          await Promise.all(inferencePromises);
+          this.calibrationEngine.setMLDistances(mlMap);
+        }
+        this.updateNetworkTelemetry(this.calibrationEngine.applyToLinks(links));
       }
     }
 
@@ -646,7 +697,7 @@ export class StateManager {
     const n3Node = this.nodes.find(n => n.id === 'NODE03');
     const n3Link = this.links.find(l => (l.source === 'HELMET01' && l.destination === 'NODE03') || (l.source === 'NODE03' && l.destination === 'HELMET01'));
     const n3Dist = this.spatialPosition.dist_n3 >= 0 ? this.spatialPosition.dist_n3 : (n3Link?.distance || null);
-    const n3Rssi = this.spatialPosition.rssi_n3 != null ? this.spatialPosition.rssi_n3 : (n3Link ? n3Link.rssi : -45);
+    const n3Rssi = this.spatialPosition.rssi_n3 != null ? this.spatialPosition.rssi_n3 : (n3Link ? n3Link.rssi : null);
     const n3Hazard = this.structuralHealth.node3?.status || 'STABLE';
     const n3Online = n3Node?.status === 'ONLINE';
 
@@ -665,7 +716,7 @@ export class StateManager {
     const n2Node = this.nodes.find(n => n.id === 'NODE02');
     const n2Link = this.links.find(l => (l.source === 'HELMET01' && l.destination === 'NODE02') || (l.source === 'NODE02' && l.destination === 'HELMET01'));
     const n2Dist = this.spatialPosition.dist_n2 >= 0 ? this.spatialPosition.dist_n2 : (n2Link?.distance || null);
-    const n2Rssi = this.spatialPosition.rssi_n2 != null ? this.spatialPosition.rssi_n2 : (n2Link ? n2Link.rssi : -51);
+    const n2Rssi = this.spatialPosition.rssi_n2 != null ? this.spatialPosition.rssi_n2 : (n2Link ? n2Link.rssi : null);
     const n2Hazard = this.structuralHealth.node2?.status || 'STABLE';
     const n2Online = n2Node?.status === 'ONLINE';
 
@@ -688,8 +739,8 @@ export class StateManager {
       activeNodes.push({
         id: 'NODE01',
         name: 'Node 1 Surface Master Gateway',
-        distance_m: n1Link?.distance || 10.0,
-        rssi_dbm: n1Link ? n1Link.rssi : -65,
+        distance_m: n1Link?.distance != null ? n1Link.distance : null,
+        rssi_dbm: n1Link ? n1Link.rssi : null,
         hazard: 'STABLE',
         status: 'ONLINE'
       });
@@ -733,7 +784,7 @@ export class StateManager {
       hazards,
       closest_node: closestNode,
       active_nodes: activeNodes,
-      nearest_location_summary: closestNode ? `${closestNode.id} (${closestNode.distance_m != null ? `${closestNode.distance_m}m` : '--'}, ${closestNode.rssi_dbm} dBm)` : 'SURFACE ROOT'
+      nearest_location_summary: closestNode ? `${closestNode.id} (${closestNode.distance_m != null ? `${closestNode.distance_m}m` : '--'}, ${closestNode.rssi_dbm != null ? `${closestNode.rssi_dbm} dBm` : 'N/A'})` : 'SURFACE ROOT'
     };
   }
 
@@ -745,33 +796,33 @@ export class StateManager {
     this.structuralHealth = { ...this.structuralHealth, ...health };
 
     const assessment = this.computeCasualtyAssessment();
-    const closestSummary = assessment.closest_node ? `Nearest Active Rescue Node: ${assessment.closest_node.id} @ ${assessment.closest_node.distance_m != null ? `${assessment.closest_node.distance_m}m` : '--'} (${assessment.closest_node.rssi_dbm} dBm)` : 'Surface Gateway direct';
+    const closestSummary = assessment.closest_node ? `Nearest Active Rescue Node: ${assessment.closest_node.id} @ ${assessment.closest_node.distance_m != null ? `${assessment.closest_node.distance_m}m` : '--'} (${assessment.closest_node.rssi_dbm != null ? `${assessment.closest_node.rssi_dbm} dBm` : 'N/A'})` : 'Surface Gateway direct';
 
     if (health.node2?.status === 'CRITICAL_HAZARD' && prevN2 !== 'CRITICAL_HAZARD') {
       const distStr = this.spatialPosition.dist_n2 >= 0 ? `${this.spatialPosition.dist_n2.toFixed(1)}m` : '--';
       const n2Link = this.links.find(l => (l.source === 'HELMET01' && l.destination === 'NODE02') || (l.source === 'NODE02' && l.destination === 'HELMET01'));
-      const rssiVal = this.spatialPosition.rssi_n2 != null ? this.spatialPosition.rssi_n2 : (n2Link ? n2Link.rssi : -51);
-      const rssiStr = `${rssiVal} dBm`;
+      const rssiVal = this.spatialPosition.rssi_n2 != null ? this.spatialPosition.rssi_n2 : (n2Link ? n2Link.rssi : null);
+      const rssiStr = rssiVal != null ? `${rssiVal} dBm` : 'N/A';
       this.addEvent('EMERGENCY', `🚨 [CRITICAL TILT/COLLAPSE] Node 2 Station has severe structural vibration/tilt! Miner location: ${distStr} from N2 (RSSI: ${rssiStr}). ${closestSummary}`);
     } else if (health.node2?.status === 'WARNING_SHIFT' && prevN2 !== 'WARNING_SHIFT') {
       const distStr = this.spatialPosition.dist_n2 >= 0 ? `${this.spatialPosition.dist_n2.toFixed(1)}m` : '--';
       const n2Link = this.links.find(l => (l.source === 'HELMET01' && l.destination === 'NODE02') || (l.source === 'NODE02' && l.destination === 'HELMET01'));
-      const rssiVal = this.spatialPosition.rssi_n2 != null ? this.spatialPosition.rssi_n2 : (n2Link ? n2Link.rssi : -51);
-      const rssiStr = `${rssiVal} dBm`;
+      const rssiVal = this.spatialPosition.rssi_n2 != null ? this.spatialPosition.rssi_n2 : (n2Link ? n2Link.rssi : null);
+      const rssiStr = rssiVal != null ? `${rssiVal} dBm` : 'N/A';
       this.addEvent('WARNING', `⚠️ [STRUCTURAL WARNING] Node 2 Station minor shift/tilt detected. Miner is ${distStr} away (RSSI: ${rssiStr}). ${closestSummary}`);
     }
 
     if (health.node3?.status === 'CRITICAL_HAZARD' && prevN3 !== 'CRITICAL_HAZARD') {
       const distStr = this.spatialPosition.dist_n3 >= 0 ? `${this.spatialPosition.dist_n3.toFixed(1)}m` : '--';
       const n3Link = this.links.find(l => (l.source === 'HELMET01' && l.destination === 'NODE03') || (l.source === 'NODE03' && l.destination === 'HELMET01'));
-      const rssiVal = this.spatialPosition.rssi_n3 != null ? this.spatialPosition.rssi_n3 : (n3Link ? n3Link.rssi : -45);
-      const rssiStr = `${rssiVal} dBm`;
+      const rssiVal = this.spatialPosition.rssi_n3 != null ? this.spatialPosition.rssi_n3 : (n3Link ? n3Link.rssi : null);
+      const rssiStr = rssiVal != null ? `${rssiVal} dBm` : 'N/A';
       this.addEvent('EMERGENCY', `🚨 [CRITICAL TILT/COLLAPSE] Node 3 Station has severe structural vibration/tilt! Miner location: ${distStr} from N3 (RSSI: ${rssiStr}). ${closestSummary}`);
     } else if (health.node3?.status === 'WARNING_SHIFT' && prevN3 !== 'WARNING_SHIFT') {
       const distStr = this.spatialPosition.dist_n3 >= 0 ? `${this.spatialPosition.dist_n3.toFixed(1)}m` : '--';
       const n3Link = this.links.find(l => (l.source === 'HELMET01' && l.destination === 'NODE03') || (l.source === 'NODE03' && l.destination === 'HELMET01'));
-      const rssiVal = this.spatialPosition.rssi_n3 != null ? this.spatialPosition.rssi_n3 : (n3Link ? n3Link.rssi : -45);
-      const rssiStr = `${rssiVal} dBm`;
+      const rssiVal = this.spatialPosition.rssi_n3 != null ? this.spatialPosition.rssi_n3 : (n3Link ? n3Link.rssi : null);
+      const rssiStr = rssiVal != null ? `${rssiVal} dBm` : 'N/A';
       this.addEvent('WARNING', `⚠️ [STRUCTURAL WARNING] Node 3 Station minor shift/tilt detected. Miner is ${distStr} away (RSSI: ${rssiStr}). ${closestSummary}`);
     }
   }
