@@ -668,6 +668,8 @@ body {
 
 .topology-node-box.node-gateway {
   border-top-width: 4px;
+  position: relative;
+  top: 20px;
 }
 
 .node-box-header {
@@ -714,12 +716,12 @@ body {
   position: relative;
   width: 100%;
   max-width: 540px;
-  margin: 0 auto;
+  margin: 0 0;
 }
 
 .link-line {
   width: 3px;
-  height: 24px;
+  height: 30px;
   background-color: var(--border-strong);
   transition: background-color 0.2s ease;
 }
@@ -1769,4 +1771,101 @@ body {
   background: #060d14;
   border: 1px solid rgba(255,255,255,0.05);
   cursor: default;
+}
+
+/* ==========================================================================
+   ROUTE MAP — CALM LIGHT THEME (Phase 5 UI, route_map.html only)
+   The page body carries .rm-light; the other dashboards keep the default look.
+   ========================================================================== */
+
+body.rm-light {
+  background: linear-gradient(180deg, #f5f9f6 0%, #edf3ef 100%);
+}
+
+.rm-light .console-header,
+.rm-light .route-hero-card,
+.rm-light .network-table-card,
+.rm-light .network-summary-card,
+.rm-light .demo-dock,
+.rm-light .tunnel-map-section {
+  border-radius: 14px;
+  border-color: #d9e4dc;
+  box-shadow: 0 1px 2px rgba(23, 55, 38, 0.05), 0 8px 24px rgba(23, 55, 38, 0.06);
+}
+
+.rm-light .route-hero-card {
+  border-width: 1px;
+}
+
+.rm-light .console-nav {
+  border-radius: 10px;
+  border-color: #cbd8cf;
+}
+
+.rm-light .btn-scenario {
+  border-radius: 8px;
+}
+
+#routeMapCanvas {
+  display: block;
+  width: 100%;
+  height: clamp(320px, 52vh, 520px);
+  border-radius: 10px;
+  background: #f7faf8;
+  border: 1px solid #dfe9e2;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+#routeMapCanvas.dragging {
+  cursor: grabbing;
+}
+
+.map-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px 0;
+}
+
+.map-ctrl-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 5px 12px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.map-ctrl-btn:hover {
+  border-color: #15803d;
+  color: #166534;
+}
+
+.map-ctrl-btn.active {
+  background: #ecfdf5;
+  border-color: #15803d;
+  color: #166534;
+}
+
+.map-zoom-tag {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  padding: 5px 4px;
+}
+
+.calibration-strip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px 0;
+  flex-wrap: wrap;
 }

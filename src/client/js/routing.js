@@ -43,6 +43,10 @@
     helmetIdDisplay: document.getElementById('helmetIdDisplay'),
     helmetStateDisplay: document.getElementById('helmetStateDisplay'),
 
+    tunnelMapStatus: document.getElementById('tunnelMapStatus'),
+
+    distLockBadge: document.getElementById('distLockBadge'),
+
     // Transition Alert
     routeTransitionBanner: document.getElementById('routeTransitionBanner'),
     routeTransitionText: document.getElementById('routeTransitionText'),
@@ -187,6 +191,19 @@
     }
     updateLastSeenTick();
 
+    if (state.calibration && elements.distLockBadge) {
+      if (state.calibration.status === 'RUNNING') {
+        elements.distLockBadge.textContent = 'CALIBRATING…';
+        setStatusClass(elements.distLockBadge, 'WARNING');
+      } else if (state.calibration.status === 'LOCKED') {
+        elements.distLockBadge.textContent = 'DIST: LOCKED';
+        setStatusClass(elements.distLockBadge, 'NORMAL');
+      } else {
+        elements.distLockBadge.textContent = 'DIST: LIVE';
+        setStatusClass(elements.distLockBadge, 'WARNING');
+      }
+    }
+
     const net = state.network;
     if (!net) return;
     const route = net.route || { current_route: [], previous_route: [], status: 'NORMAL', failover_active: false, failed_node: null };
@@ -276,7 +293,8 @@
         elements.routeImpactReason.textContent = 'Critical isolation: No valid physical LoRa link to surface gateway.';
         elements.routeImpactReason.style.color = '#dc2626';
       } else if (route.status === 'FAILOVER') {
-        elements.routeImpactReason.textContent = `Primary trunk through ${route.failed_node || 'relay'} offline — Auto-rerouted via Shaft Relay 01.`;
+        const detour = (route.current_route || []).filter(n => n !== 'HELMET01' && n !== 'NODE01');
+        elements.routeImpactReason.textContent = `Primary trunk through ${route.failed_node || 'relay'} offline — Auto-rerouted via ${detour.length > 0 ? detour.join(' + ') : 'direct uplink'}.`;
         elements.routeImpactReason.style.color = '#92400e';
       } else {
         elements.routeImpactReason.textContent = 'Optimal multi-hop path nominal across all relay stations.';
@@ -336,7 +354,13 @@
         const isDisconnected = link.status === 'DISCONNECTED' || link.available === false;
 
         if (metricsEl) {
-          metricsEl.textContent = `${link.rssi} dBm | EST. ${link.distance} m`;
+          if (isDisconnected) {
+            metricsEl.textContent = 'SEVERED — NO SIGNAL';
+          } else if (link.rssi == null && link.distance == null) {
+            metricsEl.textContent = 'TRUNK UPLINK — NO METRICS';
+          } else {
+            metricsEl.textContent = `${link.rssi != null ? `${link.rssi} dBm` : 'N/A'} | ${link.distance != null ? `EST. ${link.distance} m` : '--'}`;
+          }
         }
 
         if (linkEl) {
@@ -391,13 +415,16 @@
           if (l.quality === 'WEAK' || l.quality === 'FAIR') qualBadgeClass = 'status-warning';
           if (isDisc) qualBadgeClass = 'status-critical';
 
+          const rssiStr = isDisc ? 'N/A (Offline)' : (l.rssi != null ? `${l.rssi} dBm` : 'TRUNK UPLINK');
+          const distStr = (!isDisc && l.distance != null && l.distance > 0) ? `EST. ${l.distance} m` : '--';
+
           return `
             <tr>
               <td style="font-weight: 700; ${inRoute ? 'color: #0f172a;' : 'color: #64748b;'}">${l.source} ◄──► ${l.destination}</td>
-              <td style="font-weight: 800;">${l.rssi} dBm</td>
+              <td style="font-weight: 800;">${rssiStr}</td>
               <td>${renderMiniSignalBar(l.quality, l.percentage)}</td>
-              <td>EST. ${l.distance} m</td>
-              <td><span class="status-pill ${qualBadgeClass}">${isDisc ? 'OFFLINE' : l.quality}</span></td>
+              <td>${distStr}</td>
+              <td><span class="status-pill ${qualBadgeClass}">${isDisc ? 'OFFLINE' : (l.hide_metrics ? 'TRUNK' : l.quality)}</span></td>
               <td><span class="status-pill ${roleTagClass}">${roleTagText}</span></td>
             </tr>
           `;
@@ -498,8 +525,17 @@
           const cfg = await res.json();
           const dsValue = document.getElementById('dataSourceValue');
           if (dsValue && cfg.hardware) {
-            dsValue.textContent = cfg.hardware.data_source === 'hardware' ? 'LIVE HARDWARE' : 'SIMULATOR';
-            dsValue.style.color = cfg.hardware.data_source === 'hardware' ? '#10b981' : '#f59e0b';
+            const ds = cfg.hardware.data_source;
+            if (ds === 'hardware' || ds === 'serial') {
+              dsValue.textContent = 'LIVE HARDWARE (Serial)';
+              dsValue.style.color = '#10b981';
+            } else if (ds === 'node1' || ds === 'node1_wifi') {
+              dsValue.textContent = `LIVE NODE1 WiFi (${cfg.hardware.node1_ip})`;
+              dsValue.style.color = '#10b981';
+            } else {
+              dsValue.textContent = 'SIMULATOR';
+              dsValue.style.color = '#f59e0b';
+            }
           }
         }
       } catch (e) {
@@ -581,19 +617,25 @@
     }
     tunnelMap.nodeStates['HELMET01'] = state.online ? 'ONLINE' : 'OFFLINE';
 
-    // ── Collect distances into links map ────────────────────────────────
+    // ── Collect distances into a fresh links map (prunes stale entries) ──
+    // Live link distances win; spatial solver values only fill in / override
+    // when actually valid (Node1 hardware provides them).
+    const fresh = {};
     if (state.network && state.network.links) {
       state.network.links.forEach(l => {
         const key = [l.source, l.destination].sort().join('|');
-        if (l.distance != null) tunnelMap.links[key] = l.distance;
+        if (l.distance != null) fresh[key] = l.distance;
       });
     }
     if (state.spatial_position) {
       const sp = state.spatial_position;
-      if (sp.dist_n2 != null && sp.dist_n2 >= 0) tunnelMap.links['HELMET01|NODE02'] = sp.dist_n2;
-      if (sp.dist_n3 != null && sp.dist_n3 >= 0) tunnelMap.links['HELMET01|NODE03'] = sp.dist_n3;
-      if (sp.fixed_dist  != null && sp.fixed_dist  > 0) tunnelMap.links['NODE02|NODE03'] = sp.fixed_dist;
+      if (sp.dist_n2 != null && sp.dist_n2 >= 0) fresh['HELMET01|NODE02'] = sp.dist_n2;
+      if (sp.dist_n3 != null && sp.dist_n3 >= 0) fresh['HELMET01|NODE03'] = sp.dist_n3;
+      if (sp.fixed_dist != null && sp.fixed_dist > 0 && fresh['NODE02|NODE03'] == null) {
+        fresh['NODE02|NODE03'] = sp.fixed_dist;
+      }
     }
+    tunnelMap.links = fresh;
 
     // ── 1-D trilateration: compute physical position from N2 & N3 ──────────
     //  posFromN2 = (d2² - d3² + fd²) / (2 × fd)
@@ -603,6 +645,27 @@
     const fd = tunnelMap.links['NODE02|NODE03'] || 5;
     if (d2 != null && d3 != null) {
       tunnelMap.targetPhysPos = (d2 * d2 - d3 * d3 + fd * fd) / (2 * fd);
+    } else if (d3 != null) {
+      // Only the N3 distance known: miner stays on the working-face side
+      //  d3 ≤ fd → between N2 and N3 ; d3 > fd → deeper than N3
+      tunnelMap.targetPhysPos = d3 <= fd ? (fd - d3) : (fd + d3);
+    } else if (d2 != null) {
+      tunnelMap.targetPhysPos = d2;
+    }
+
+    // ── Dynamic map status tag ───────────────────────────────────────────
+    if (elements.tunnelMapStatus) {
+      elements.tunnelMapStatus.classList.remove('status-normal', 'status-warning', 'status-critical');
+      if (tunnelMap.nodeStates['HELMET01'] === 'OFFLINE') {
+        elements.tunnelMapStatus.textContent = '[ TRACKING LOST — MINER OFFLINE ]';
+        elements.tunnelMapStatus.classList.add('status-critical');
+      } else if (['NODE01', 'NODE02', 'NODE03'].some(id => tunnelMap.nodeStates[id] === 'OFFLINE')) {
+        elements.tunnelMapStatus.textContent = '[ PARTIAL TRACKING — RELAY OFFLINE ]';
+        elements.tunnelMapStatus.classList.add('status-warning');
+      } else {
+        elements.tunnelMapStatus.textContent = '[ TRACKING ACTIVE ]';
+        elements.tunnelMapStatus.classList.add('status-normal');
+      }
     }
   }
 
@@ -671,8 +734,8 @@
     //  Screen mapping: one metre = (nodeX.NODE03 - nodeX.NODE02) / fixedDist  px
     //  So: helmetX = nodeX.NODE02 + posFromN2 × px_per_m
     //
-    const distN2    = tunnelMap.links['HELMET01|NODE02'] || 0;
-    const distN3    = tunnelMap.links['HELMET01|NODE03'] || 0;
+    const distN2    = tunnelMap.links['HELMET01|NODE02'];
+    const distN3    = tunnelMap.links['HELMET01|NODE03'];
     const fixedDist = tunnelMap.links['NODE02|NODE03']   || 5;
 
     const posFromN2    = tunnelMap.physPos;          // smoothed physical pos (metres)
@@ -726,12 +789,12 @@
       ctx.setLineDash([]);
 
       // Distance label above cable midpoint
-      if (dist != null) {
+      {
         const mx = (x1 + x2) / 2;
         ctx.font = '500 10px JetBrains Mono, monospace';
         ctx.textAlign = 'center';
         ctx.fillStyle = active ? 'rgba(134,239,172,0.8)' : 'rgba(252,165,165,0.7)';
-        ctx.fillText(`${Number(dist).toFixed(1)} m`, mx, midY - 14);
+        ctx.fillText(dist != null ? `EST. ${Number(dist).toFixed(1)} m` : 'TRUNK LINK', mx, midY - 14);
       }
     });
 
@@ -755,7 +818,7 @@
       ctx.font = '500 10px JetBrains Mono, monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = helmetLinkActive ? 'rgba(125,211,252,0.85)' : 'rgba(252,165,165,0.7)';
-      ctx.fillText(`${Number(anchorDist).toFixed(1)} m`, mx, midY - 14);
+      ctx.fillText(`EST. ${Number(anchorDist).toFixed(1)} m`, mx, midY - 14);
     }
 
     // ── Draw fixed nodes ────────────────────────────────────────
@@ -842,10 +905,44 @@
     // Real distance label below helmet
     ctx.font = '500 9px Inter, sans-serif';
     ctx.fillStyle = 'rgba(148,163,184,0.6)';
-    const labelDist = posFromN2 < 0
-      ? `${Math.abs(posFromN2).toFixed(1)}m from N2 (surface-side)`
-      : `${Number(distN3).toFixed(1)}m from N3`;
+    const distParts = [];
+    if (distN2 != null) distParts.push(`${distN2.toFixed(1)} m from N2`);
+    if (distN3 != null) distParts.push(`${distN3.toFixed(1)} m from N3`);
+    let labelDist = distParts.length > 0 ? distParts.join(' · ') : 'DISTANCE UNKNOWN';
+    if (posFromN2 < 0) labelDist += ' (surface-side)';
+    else if (posFromN2 > fixedDist) labelDist += ' (deeper)';
     ctx.fillText(labelDist, helmetX, midY + hr + 14);
+
+    // ── Metre ruler along the N2–N3 span ───────────────────────
+    const rulerY = tunnelY2 + 18;
+    const stepOptions = [1, 2, 5, 10, 20, 50];
+    const rulerStep = stepOptions.find(s => fixedDist / s <= 7) || 50;
+    ctx.strokeStyle = 'rgba(80,160,100,0.3)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(nodeX.NODE02, rulerY);
+    ctx.lineTo(nodeX.NODE03, rulerY);
+    ctx.stroke();
+    for (let m = 0; m <= fixedDist; m += rulerStep) {
+      const x = nodeX.NODE02 + m * pxPerMetre;
+      ctx.beginPath();
+      ctx.moveTo(x, rulerY);
+      ctx.lineTo(x, rulerY + 5);
+      ctx.stroke();
+      ctx.font = '500 8px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(148,163,184,0.55)';
+      ctx.fillText(`${m} m`, x, rulerY + 15);
+    }
+
+    // ── Zone captions ───────────────────────────────────────────
+    ctx.font = '600 9px JetBrains Mono, monospace';
+    ctx.textAlign = 'left';
+    ctx.fillStyle = 'rgba(134,239,172,0.55)';
+    ctx.fillText('◄ SURFACE SHAFT', 12, 20);
+    ctx.textAlign = 'right';
+    ctx.fillStyle = 'rgba(148,163,184,0.55)';
+    ctx.fillText('DEEP TUNNEL ►', W - 12, H - 12);
 
     // ── Legend at top-right ──────────────────────────────────────
     const lx = W - 12, ly = 12;

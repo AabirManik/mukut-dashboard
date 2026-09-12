@@ -24,6 +24,7 @@
         <a href="/dashboard" class="nav-tab">SAFETY OVERVIEW</a>
         <a href="/dashboard/network" class="nav-tab active">UNDERGROUND NETWORK</a>
         <a href="/dashboard/routing" class="nav-tab">ROUTING &amp; FAILOVER</a>
+        <a href="/dashboard/routemap" class="nav-tab">ROUTE MAP</a>
       </nav>
 
       <div class="header-status-group">
@@ -31,6 +32,7 @@
           <span class="label">DATA SOURCE:</span>
           <span class="value" id="dataSourceValue">SIMULATOR</span>
         </div>
+        <span class="status-pill status-warning" id="distLockBadge" style="margin-right: 12px;">DIST: LIVE</span>
         <div class="last-seen-badge" id="lastSeenDisplay">
           <span class="label">LAST UPDATE:</span>
           <span class="value" id="lastSeenValue">Connecting...</span>
@@ -269,6 +271,10 @@
           <div class="card-meta-header">
             <span class="section-label">INTER-NODE LINK METRICS</span>
             <span class="table-count" id="linkCountDisplay">4 ACTIVE LINKS</span>
+          </div>
+          <div class="calibration-strip">
+            <button class="map-ctrl-btn" id="btnCalibrate" type="button">CALIBRATE DISTANCES</button>
+            <span class="status-pill status-warning" id="calibStatusChip">UNCALIBRATED — LIVE RSSI ESTIMATES</span>
           </div>
           <table class="data-table">
             <thead>

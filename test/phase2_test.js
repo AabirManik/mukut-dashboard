@@ -16,7 +16,7 @@ console.log('\n[TEST GROUP 1] Network Model & Initialization Tests:');
   assert.strictEqual(state.network.health, 'GOOD', 'Default network health should be GOOD');
   assert.strictEqual(state.network.connected_node, 'NODE03', 'Default connected node should be NODE03');
   assert.strictEqual(state.network.nodes.length, 4, 'Should have 4 nodes (NODE01, NODE02, NODE03, HELMET01)');
-  assert.ok(state.network.links.length >= 5, 'Should have at least 5 communication links');
+  assert.ok(state.network.links.length >= 4, 'Should have at least 4 communication links');
 
   console.log('  ✓ Initialized 4 network nodes and communication links');
   console.log('  ✓ Default network health is GOOD and target node is NODE03');

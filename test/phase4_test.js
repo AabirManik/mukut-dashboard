@@ -125,10 +125,10 @@ console.log('\n[TEST GROUP 2] Node1 Bridge Translator:');
   assert.ok(translated.environment.humidity === 68.0, `Humidity: ${translated.environment.humidity}`);
   console.log('  ✓ Temperature & humidity passed through directly');
 
-  assert.ok(translated.environment.methane >= 0 && translated.environment.methane <= 3.0, `Methane: ${translated.environment.methane}`);
-  assert.ok(translated.environment.carbon_monoxide >= 0 && translated.environment.carbon_monoxide <= 200, `CO: ${translated.environment.carbon_monoxide}`);
-  assert.ok(translated.environment.smoke >= 0 && translated.environment.smoke <= 500, `Smoke: ${translated.environment.smoke}`);
-  console.log(`  ✓ Gas values scaled: CH4=${translated.environment.methane} %vol, CO=${translated.environment.carbon_monoxide} ppm, Smoke=${translated.environment.smoke} ppm`);
+  assert.strictEqual(translated.environment.methane, 155, `Methane: ${translated.environment.methane}`);
+  assert.strictEqual(translated.environment.carbon_monoxide, 160, `CO: ${translated.environment.carbon_monoxide}`);
+  assert.strictEqual(translated.environment.smoke, 170, `Smoke: ${translated.environment.smoke}`);
+  console.log(`  ✓ Gas values passed through raw (ppm): CH4=${translated.environment.methane}, CO=${translated.environment.carbon_monoxide}, Smoke=${translated.environment.smoke}`);
 
   assert.strictEqual(translated.safety.sos, false);
   console.log('  ✓ SOS = false for SAFE status');
@@ -169,10 +169,10 @@ console.log('\n[TEST GROUP 2] Node1 Bridge Translator:');
   gasNode1.environment.mq6_lpg_ppm = 2000;
   gasNode1.environment.mq8_hydrogen_ppm = 2000;
   const translatedGas = bridge.translate(gasNode1);
-  assert.ok(translatedGas.environment.methane >= 2.9, `High methane: ${translatedGas.environment.methane}`);
-  assert.ok(translatedGas.environment.carbon_monoxide >= 190, `High CO: ${translatedGas.environment.carbon_monoxide}`);
-  assert.ok(translatedGas.environment.smoke >= 490, `High smoke: ${translatedGas.environment.smoke}`);
-  console.log(`  ✓ Max gas scaling: CH4=${translatedGas.environment.methane}, CO=${translatedGas.environment.carbon_monoxide}, Smoke=${translatedGas.environment.smoke}`);
+  assert.strictEqual(translatedGas.environment.methane, 2000, `High methane: ${translatedGas.environment.methane}`);
+  assert.strictEqual(translatedGas.environment.carbon_monoxide, 2000, `High CO: ${translatedGas.environment.carbon_monoxide}`);
+  assert.strictEqual(translatedGas.environment.smoke, 2000, `High smoke: ${translatedGas.environment.smoke}`);
+  console.log(`  ✓ High raw gas values passed through: CH4=${translatedGas.environment.methane}, CO=${translatedGas.environment.carbon_monoxide}, Smoke=${translatedGas.environment.smoke} ppm`);
 
   // 2.6: Gas scaling boundary - low raw values
   const lowGasNode1 = JSON.parse(JSON.stringify(normalNode1));
@@ -180,10 +180,10 @@ console.log('\n[TEST GROUP 2] Node1 Bridge Translator:');
   lowGasNode1.environment.mq6_lpg_ppm = 150;
   lowGasNode1.environment.mq8_hydrogen_ppm = 150;
   const translatedLow = bridge.translate(lowGasNode1);
-  assert.strictEqual(translatedLow.environment.methane, 0);
-  assert.strictEqual(translatedLow.environment.carbon_monoxide, 0);
-  assert.strictEqual(translatedLow.environment.smoke, 0);
-  console.log('  ✓ Min gas scaling: all at baseline (0)');
+  assert.strictEqual(translatedLow.environment.methane, 150);
+  assert.strictEqual(translatedLow.environment.carbon_monoxide, 150);
+  assert.strictEqual(translatedLow.environment.smoke, 150);
+  console.log('  ✓ Low raw gas values passed through unchanged (150 ppm, below warning threshold)');
 
   // 2.7: Translated packet passes schema validation
   const validation = validateTelemetry(translated);
@@ -196,6 +196,7 @@ console.log('\n[TEST GROUP 2] Node1 Bridge Translator:');
   assert.ok(result.status, 'Result has status field');
   assert.ok(result.network.route, 'Result has network route');
   console.log(`  ✓ Translated packet processes through StateManager → status=${result.status}`);
+  sm.destroy();
 }
 
 // 3. StateManager Failover with NODE03 Tests
@@ -225,6 +226,7 @@ console.log('\n[TEST GROUP 3] Failover with NODE03:');
   assert.strictEqual(restoredRoute.status, 'NORMAL');
   assert.ok(!restoredRoute.failover_active, 'Failover no longer active');
   console.log(`  ✓ NODE02 restored → NORMAL route: ${restoredRoute.current_route.join(' → ')}`);
+  sm.destroy();
 }
 
 // 4. Full Pipeline Test: Node1 Data → StateManager → WebSocket State
@@ -274,6 +276,7 @@ console.log('\n[TEST GROUP 4] Full Pipeline (Node1 → StateManager → State):'
   const gasState = sm.processTelemetry(gasTranslated);
   assert.ok(gasState.gas_status.overall !== 'NORMAL', `Gas status: ${gasState.gas_status.overall}`);
   console.log(`  ✓ Gas warning through full pipeline → atmosphere ${gasState.gas_status.overall}`);
+  sm.destroy();
 }
 
 console.log('\n=======================================================');

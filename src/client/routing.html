@@ -24,6 +24,7 @@
         <a href="/dashboard" class="nav-tab">SAFETY OVERVIEW</a>
         <a href="/dashboard/network" class="nav-tab">UNDERGROUND NETWORK</a>
         <a href="/dashboard/routing" class="nav-tab active">ROUTING &amp; FAILOVER</a>
+        <a href="/dashboard/routemap" class="nav-tab">ROUTE MAP</a>
       </nav>
 
       <div class="header-status-group">
@@ -35,6 +36,7 @@
           <span class="label">DATA SOURCE:</span>
           <span class="value" id="dataSourceValue">SIMULATOR</span>
         </div>
+        <span class="status-pill status-warning" id="distLockBadge" style="margin-right: 12px;">DIST: LIVE</span>
         <div class="last-seen-badge" id="lastSeenDisplay">
           <span class="label">LAST UPDATE:</span>
           <span class="value" id="lastSeenValue">Connecting...</span>
@@ -124,7 +126,7 @@
       <section class="topology-card routing-graph-card">
         <div class="card-meta-header">
           <span class="section-label">UNDERGROUND MESH TOPOLOGY &amp; ACTIVE PATHWAY</span>
-          <span class="status-code">[ ENGINE: DETERMINISTIC DIJKSTRA / LINK-WEIGHTED ]</span>
+          <span class="status-code">[ ENGINE: BFS PATH ENUMERATION / LINK-QUALITY WEIGHTED ]</span>
         </div>
 
         <div class="mesh-graph-wrapper">
@@ -148,8 +150,17 @@
               <div class="graph-link-line"></div>
               <div class="graph-link-badge">
                 <span class="badge-dir">NODE02 ◄──► NODE01</span>
-                <span class="badge-metrics" id="metrics_link_node02_node01">-68 dBm | EST. 52 m</span>
+                <span class="badge-metrics" id="metrics_link_node02_node01">TRUNK UPLINK — NO METRICS</span>
                 <span class="badge-role" id="role_link_node02_node01">PRIMARY TRUNK</span>
+              </div>
+            </div>
+
+            <div class="graph-link-segment link-standby" id="graphLink_link_node03_node01">
+              <div class="graph-link-line"></div>
+              <div class="graph-link-badge bypass-badge">
+                <span class="badge-dir">NODE03 ◄──► NODE01</span>
+                <span class="badge-metrics" id="metrics_link_node03_node01">-79 dBm | EST. 15 m</span>
+                <span class="badge-role" id="role_link_node03_node01">STANDBY BYPASS</span>
               </div>
             </div>
 
@@ -214,7 +225,7 @@
         <div class="network-table-card">
           <div class="card-meta-header">
             <span class="section-label">TOPOLOGY LINK STATES &amp; ROUTE MEMBERSHIP</span>
-            <span class="table-count" id="activeHopsCountDisplay">4 HOPS (5 NODES)</span>
+            <span class="table-count" id="activeHopsCountDisplay">3 HOPS (4 NODES)</span>
           </div>
           <table class="data-table">
             <thead>

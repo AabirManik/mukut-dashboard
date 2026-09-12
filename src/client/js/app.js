@@ -20,6 +20,8 @@
     helmetIdDisplay: document.getElementById('helmetIdDisplay'),
     helmetStateDisplay: document.getElementById('helmetStateDisplay'),
 
+    distLockBadge: document.getElementById('distLockBadge'),
+
     workerSafetyCard: document.getElementById('workerSafetyCard'),
     statusCodeDisplay: document.getElementById('statusCodeDisplay'),
     safetyStateDisplay: document.getElementById('safetyStateDisplay'),
@@ -128,6 +130,19 @@
       }
     }
     updateLastSeenTick();
+
+    if (state.calibration && elements.distLockBadge) {
+      if (state.calibration.status === 'RUNNING') {
+        elements.distLockBadge.textContent = 'CALIBRATING…';
+        setStatusClass(elements.distLockBadge, 'WARNING');
+      } else if (state.calibration.status === 'LOCKED') {
+        elements.distLockBadge.textContent = 'DIST: LOCKED';
+        setStatusClass(elements.distLockBadge, 'NORMAL');
+      } else {
+        elements.distLockBadge.textContent = 'DIST: LIVE';
+        setStatusClass(elements.distLockBadge, 'WARNING');
+      }
+    }
 
     // 2. Dominant Worker Safety Card
     if (elements.workerSafetyCard) {

@@ -40,7 +40,7 @@ if (isHardwareMode) {
   );
 }
 
-if (isNode1Mode || (config.hardware && config.hardware.node1_ip)) {
+if (isNode1Mode) {
   node1Bridge = new Node1Bridge(
     stateManager,
     config.hardware.node1_ip || '10.251.147.60',
@@ -138,6 +138,26 @@ app.get('/api/simulator/status', (req, res) => {
   res.json(simulator.getScenario());
 });
 
+// Calibration Control Endpoints (Phase 6 — RSSI Distance Calibration)
+app.post('/api/calibrate', (req, res) => {
+  const action = (req.body && req.body.action) || 'start';
+  if (action === 'clear') {
+    stateManager.calibrationEngine.clear(stateManager);
+    stateManager.notifyListeners('STATE_UPDATE', stateManager.getFullState());
+    return res.json({ success: true, calibration: stateManager.calibrationEngine.getState() });
+  }
+
+  const result = stateManager.calibrationEngine.start(stateManager);
+  if (!result.started) {
+    return res.status(400).json({ success: false, error: result.reason });
+  }
+  res.json({ success: true, calibration: stateManager.calibrationEngine.getState() });
+});
+
+app.get('/api/calibrate', (req, res) => {
+  res.json(stateManager.calibrationEngine.getState());
+});
+
 // Page Routes
 app.get('/', (req, res) => {
   res.sendFile(path.resolve(__dirname, '../client/index.html'));
@@ -161,6 +181,14 @@ app.get('/dashboard/routing', (req, res) => {
 
 app.get('/routing', (req, res) => {
   res.sendFile(path.resolve(__dirname, '../client/routing.html'));
+});
+
+app.get('/dashboard/routemap', (req, res) => {
+  res.sendFile(path.resolve(__dirname, '../client/route_map.html'));
+});
+
+app.get('/routemap', (req, res) => {
+  res.sendFile(path.resolve(__dirname, '../client/route_map.html'));
 });
 
 // WebSocket Connection Management
@@ -236,6 +264,7 @@ server.listen(PORT, HOST, () => {
   console.log(` Safety Dashboard  : http://localhost:${PORT}/dashboard`);
   console.log(` Network Dashboard : http://localhost:${PORT}/dashboard/network`);
   console.log(` Routing Dashboard : http://localhost:${PORT}/dashboard/routing`);
+  console.log(` Route Map        : http://localhost:${PORT}/dashboard/routemap`);
   console.log(` API Endpoint      : http://localhost:${PORT}/api/telemetry`);
   console.log(` Active Sources    : ${activeSources.join(' + ')}`);
   console.log(`=======================================================`);

@@ -29,6 +29,7 @@
         "name": "Shaft Relay Node 1",
         "role": "Surface / Shaft Uplink Station",
         "type": "gateway",
+        "map_pos": { "x": 0, "y": 0 },
         "status": "ONLINE",
         "available": true
       },
@@ -37,6 +38,7 @@
         "name": "Tunnel Relay Node 2",
         "role": "Mid-Tunnel Intermediate Relay",
         "type": "node",
+        "map_pos": { "x": 52, "y": 0 },
         "status": "ONLINE",
         "available": true
       },
@@ -45,6 +47,7 @@
         "name": "Deep Tunnel Relay Node 3",
         "role": "Working Face Access Relay",
         "type": "node",
+        "map_pos": { "x": 53.61, "y": 34.96 },
         "status": "ONLINE",
         "available": true
       },
@@ -87,24 +90,6 @@
         "available": true
       },
       {
-        "id": "link_helmet_node02",
-        "source": "HELMET01",
-        "destination": "NODE02",
-        "rssi": -55,
-        "distance": 4.4,
-        "status": "CONNECTED",
-        "available": true
-      },
-      {
-        "id": "link_helmet_node01",
-        "source": "HELMET01",
-        "destination": "NODE01",
-        "rssi": -53,
-        "distance": 9.8,
-        "status": "CONNECTED",
-        "available": true
-      },
-      {
         "id": "link_node03_node01",
         "source": "NODE03",
         "destination": "NODE01",
@@ -114,6 +99,26 @@
         "available": true
       }
     ]
+  },
+  "trajectory": {
+    "stride_length_m": 0.75,
+    "waypoint_interval_m": 2.0,
+    "max_waypoints": 600,
+    "correction_strength": 0.15,
+    "resync_threshold_m": 25,
+    "corridor_width_m": 8,
+    "surface_threshold_m": 10,
+    "face_extension_m": 18,
+    "sim_walk_speed_mps": 1.5,
+    "heading_offset_deg": 0
+  },
+  "calibration": {
+    "sample_window_s": 5,
+    "path_loss": {
+      "ref_rssi_1m": -55,
+      "exponent_n": 2.8
+    },
+    "smoothing_ema": 0.25
   },
   "thresholds": {
     "methane": {

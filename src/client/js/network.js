@@ -56,7 +56,11 @@
     casualtyIncidentSummary: document.getElementById('casualtyIncidentSummary'),
 
     activeModeDisplay: document.getElementById('activeModeDisplay'),
-    scenarioButtons: document.querySelectorAll('.btn-scenario')
+    scenarioButtons: document.querySelectorAll('.btn-scenario'),
+
+    distLockBadge: document.getElementById('distLockBadge'),
+    btnCalibrate: document.getElementById('btnCalibrate'),
+    calibStatusChip: document.getElementById('calibStatusChip')
   };
 
   // Helper: Format Relative Time
@@ -192,6 +196,11 @@
             linkEl.classList.add('link-weak');
           }
         }
+      });
+
+      const knownLinkIds = new Set(net.links.map(l => l.id));
+      document.querySelectorAll('.topology-link-connector').forEach(el => {
+        if (el.id) el.style.display = knownLinkIds.has(el.id) ? '' : 'none';
       });
 
       // 5. Update Link Details Table
@@ -365,6 +374,39 @@
         }
       }
     }
+
+    // 11. Distance Calibration Status (Phase 6)
+    if (state.calibration) {
+      const cal = state.calibration;
+
+      if (elements.distLockBadge) {
+        if (cal.status === 'RUNNING') {
+          elements.distLockBadge.textContent = 'CALIBRATING…';
+          setStatusClass(elements.distLockBadge, 'WARNING');
+        } else if (cal.status === 'LOCKED') {
+          elements.distLockBadge.textContent = 'DIST: LOCKED';
+          setStatusClass(elements.distLockBadge, 'NORMAL');
+        } else {
+          elements.distLockBadge.textContent = 'DIST: LIVE';
+          setStatusClass(elements.distLockBadge, 'WARNING');
+        }
+      }
+
+      if (elements.calibStatusChip) {
+        if (cal.status === 'RUNNING' && cal.progress) {
+          elements.calibStatusChip.textContent = `CALIBRATING ${cal.progress.link} · ${cal.progress.remaining_s}s LEFT (${cal.progress.phase}/${cal.progress.total_phases})`;
+          setStatusClass(elements.calibStatusChip, 'WARNING');
+        } else if (cal.status === 'LOCKED') {
+          const t = cal.locked_at ? new Date(cal.locked_at).toTimeString().split(' ')[0] : '--:--:--';
+          const n = Object.keys(cal.locked || {}).length;
+          elements.calibStatusChip.textContent = `DISTANCES LOCKED @ ${t} (${n} LINKS)`;
+          setStatusClass(elements.calibStatusChip, 'NORMAL');
+        } else {
+          elements.calibStatusChip.textContent = 'UNCALIBRATED — LIVE RSSI ESTIMATES';
+          setStatusClass(elements.calibStatusChip, 'WARNING');
+        }
+      }
+    }
   }
 
   // Trigger Simulator Scenario
@@ -417,8 +459,17 @@
           const cfg = await res.json();
           const dsValue = document.getElementById('dataSourceValue');
           if (dsValue && cfg.hardware) {
-            dsValue.textContent = cfg.hardware.data_source === 'hardware' ? 'LIVE HARDWARE' : 'SIMULATOR';
-            dsValue.style.color = cfg.hardware.data_source === 'hardware' ? '#10b981' : '#f59e0b';
+            const ds = cfg.hardware.data_source;
+            if (ds === 'hardware' || ds === 'serial') {
+              dsValue.textContent = 'LIVE HARDWARE (Serial)';
+              dsValue.style.color = '#10b981';
+            } else if (ds === 'node1' || ds === 'node1_wifi') {
+              dsValue.textContent = `LIVE NODE1 WiFi (${cfg.hardware.node1_ip})`;
+              dsValue.style.color = '#10b981';
+            } else {
+              dsValue.textContent = 'SIMULATOR';
+              dsValue.style.color = '#f59e0b';
+            }
           }
         }
       } catch (e) {
@@ -460,6 +511,23 @@
         if (scenario) triggerScenario(scenario);
       });
     });
+
+    if (elements.btnCalibrate) {
+      elements.btnCalibrate.addEventListener('click', async () => {
+        try {
+          const res = await fetch('/api/calibrate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'start' })
+          });
+          if (!res.ok) {
+            console.error('Calibration failed:', await res.text());
+          }
+        } catch (err) {
+          console.error('Error starting calibration:', err);
+        }
+      });
+    }
 
     relativeTimer = setInterval(updateLastSeenTick, 1000);
 

@@ -1,6 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { TrajectoryEngine } from './trajectoryEngine.js';
+import { CalibrationEngine } from './calibrationEngine.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const configPath = path.resolve(__dirname, '../../config/default.json');
@@ -49,6 +51,13 @@ export class StateManager {
     };
     this.activeAlerts = [];
     this.activeEmergencies = [];
+
+    // Phase 5: Route mapping trajectory engine — must exist BEFORE initNetworkState,
+    // because the initial route calculation broadcasts a full state snapshot.
+    this.trajectoryEngine = new TrajectoryEngine(this.config);
+
+    // Phase 6: RSSI distance calibration engine (same pre-init requirement)
+    this.calibrationEngine = new CalibrationEngine(this.config);
 
     // Phase 2 + Phase 3A: Network & Route State Initialization
     this.initNetworkState();
@@ -533,13 +542,38 @@ export class StateManager {
       }
     }
 
+    // Phase 6: calibration sampling on RAW telemetry (before display overrides)
+    try {
+      this.calibrationEngine.collect(telemetry, this);
+    } catch (err) {
+      console.error('Calibration engine error:', err);
+    }
+
+    // Phase 5: trajectory update (dead reckoning + RAW anchor fusion —
+    // display distances never feed the trajectory)
+    try {
+      this.trajectoryEngine.update(telemetry, this);
+    } catch (err) {
+      console.error('Trajectory engine error:', err);
+    }
+
     if (telemetry.network) {
       if (telemetry.network.connected_node) {
         this.connectedNode = telemetry.network.connected_node;
       }
       if (Array.isArray(telemetry.network.links)) {
-        this.updateNetworkTelemetry(telemetry.network.links);
+        this.updateNetworkTelemetry(this.calibrationEngine.applyToLinks(telemetry.network.links));
       }
+    }
+
+    // Phase 6: spatial readouts follow the display distances (locked or live model)
+    const helmetN3 = this.links.find(l => l.id === 'link_helmet_node03');
+    const helmetN2 = this.links.find(l => l.id === 'link_helmet_node02');
+    if (helmetN3 && helmetN3.distance != null) {
+      this.spatialPosition.dist_n3 = Number(helmetN3.distance.toFixed(1));
+    }
+    if (helmetN2 && helmetN2.distance != null) {
+      this.spatialPosition.dist_n2 = Number(helmetN2.distance.toFixed(1));
     }
 
     this.notifyListeners('STATE_UPDATE', this.getFullState());
@@ -597,6 +631,8 @@ export class StateManager {
     this.humidityStatus = 'NORMAL';
 
     this.initNetworkState();
+    this.trajectoryEngine.reset();
+    this.calibrationEngine.reset();
 
     this.addEvent('INFO', 'System state reset to nominal');
     this.notifyListeners('STATE_UPDATE', this.getFullState());
@@ -750,6 +786,12 @@ export class StateManager {
     this.activeEmergencies = emergencies || [];
   }
 
+  applyCalibrationToRouteMap(routeMap) {
+    if (!routeMap || !Array.isArray(routeMap.anchors) || routeMap.anchors.length === 0) return routeMap;
+    routeMap.anchors = routeMap.anchors.map(a => ({ ...a, distance: this.calibrationEngine.anchorDisplay(a) }));
+    return routeMap;
+  }
+
   getFullState() {
     const elapsedSec = this.lastSeen ? Math.max(0, Math.floor((Date.now() - this.lastSeen) / 1000)) : null;
     const onlineNodesCount = this.nodes.filter(n => n.status === 'ONLINE').length;
@@ -792,6 +834,8 @@ export class StateManager {
           failed_node: this.failedNode
         }
       },
+      route_map: this.applyCalibrationToRouteMap(this.trajectoryEngine.getState()),
+      calibration: this.calibrationEngine.getState(),
       events: this.events.slice(0, 20),
       thresholds: this.config.thresholds
     };

@@ -103,6 +103,17 @@ export class Node1Bridge {
 
     links.push(n2ToN1, n3ToN2, helmetToN3, helmetToN2, helmetToN1);
 
+    const anchorsList = [];
+    if (typeof miner.total_distance_m === 'number' && miner.total_distance_m > 0) {
+      anchorsList.push({ id: 'NODE01', distance: miner.total_distance_m });
+    }
+    if (node2Relay.distance_to_helmet_m > 0) {
+      anchorsList.push({ id: 'NODE02', distance: node2Relay.distance_to_helmet_m });
+    }
+    if (node3Relay.distance_to_helmet_m > 0) {
+      anchorsList.push({ id: 'NODE03', distance: node3Relay.distance_to_helmet_m });
+    }
+
     // Synchronize Node availability in StateManager
     if (this.stateManager) {
       const n2Node = this.stateManager.nodes.find(n => n.id === 'NODE02');
@@ -181,6 +192,13 @@ export class Node1Bridge {
         direction_cardinal: miner.direction_cardinal || 'NORTH',
         step_count: miner.step_count || 0
       },
+      motion: {
+        moving: miner.motion_state === 'MOVING',
+        step_count: typeof miner.step_count === 'number' ? miner.step_count : 0,
+        distance_walked_m: typeof miner.total_distance_m === 'number' ? miner.total_distance_m : 0
+      },
+      orientation: { heading: typeof miner.heading_deg === 'number' ? miner.heading_deg : 0 },
+      anchors: anchorsList,
       network: {
         connected_node: connectedNode,
         active_route: sys.active_route || '',
