@@ -16,20 +16,22 @@
 ## Hardware Gallery
 
 | MUKUT System Overview | Node Close-up |
-| :---
+| :---: | :---: |
+| ![MUKUT Helmet](assets/helm-1.jpg) | ![Relay Node](assets/helm-2.jpg) |
 
 ## Dashboard Gallery
 
 | Analytics | Signal Panel |
 | :---: | :---: |
-| ![Analytics 1](Dashboard_gallery/dash_1.jpeg) | ![Signal 1](Dashboard_gallery/dash_2.jpeg) |
-| ![Analytics 2](Dashboard_gallery/dash_3.jpeg) | ![Signal 2](Dashboard_gallery/dash_4.jpeg) |
-| ![Analytics 3](Dashboard_gallery/dash_5.jpeg) | ![Signal 3](Dashboard_gallery/dash_6.jpeg) |
+| ![Analytics 1](assets/dash_1.jpeg) | ![Signal 1](assets/dash_2.jpeg) |
+| ![Analytics 2](assets/dash_3.jpeg) | ![Signal 2](assets/dash_4.jpeg) |
+| ![Analytics 3](assets/dash_5.jpeg) | ![Signal 3](assets/dash_6.jpeg) |
 
----
-: | :---: |
-| ![Picture 1](pictures/0cb5d83d-035b-4ab2-889d-ad7e49fe7800.jpg) | ![Picture 2](pictures/3ce03701-3198-4c3d-ad07-a3eb5c00986b.jpg) |
-| ![Picture 3](pictures/687d540f-1751-4d7d-a39b-84c690e7296a.jpg) | ![Picture 4](pictures/94ca7159-2cde-46d2-b195-f6df61b89ed6.jpg) |
+## Route Mapping
+
+| Estimated Trajectory — DR + Beacon Fusion |
+| :---: |
+| ![Route Map](assets/image.png) |
 
 ---
 
