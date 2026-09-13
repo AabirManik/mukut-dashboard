@@ -237,7 +237,8 @@ The backend uses a **Random Forest Regressor** (ONNX) trained on real LoRa RSSI 
 
 ### Training Data Analysis
 
-![ML Training Data Analysis](assets/graph.png)
+<img width="756" height="566" alt="image" src="https://github.com/user-attachments/assets/93bfe294-c18c-4804-8611-8d8f9e4148e5" />
+
 
 *Top-left: RSSI weakens with distance (mean curve). Top-right: SNR drops with distance. Bottom: box-plots show tight distributions at close range, wider spread at 10–20 m.*
 
