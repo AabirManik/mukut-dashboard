@@ -222,6 +222,37 @@ flowchart TD
 
 ---
 
+## ML Distance Estimation
+
+The backend uses a **Random Forest Regressor** (ONNX) trained on real LoRa RSSI + SNR data to estimate helmet-to-node distance — replacing the theoretical path-loss model with a data-driven approach.
+
+| Property | Value |
+|:---|:---|
+| Model | RandomForestRegressor (scikit-learn → ONNX) |
+| Features | RSSI (dBm) + SNR (dB) |
+| Training Data | 2,707 samples (Salvora outdoor LoRa + MUKUT hardware) |
+| Validated Range | 3 m – 6,656 m |
+| Runtime | onnxruntime-web (WASM backend, Node.js v24 compatible) |
+| Inference Time | < 5 ms per prediction |
+
+### Training Data Analysis
+
+![ML Training Data Analysis](assets/graph.png)
+
+*Top-left: RSSI weakens with distance (mean curve). Top-right: SNR drops with distance. Bottom: box-plots show tight distributions at close range, wider spread at 10–20 m.*
+
+### How It Fits
+
+1. Raw RSSI + SNR arrive from the gateway
+2. **Median filter** (window=5) rejects spike noise
+3. **ONNX inference** estimates distance from filtered RSSI + SNR
+4. **Display layer** shows ML distance (with EMA smoothing for stability)
+5. **Trajectory engine** always receives RAW telemetry (not ML-processed)
+
+> When the two-point range calibration (RANGE CAL) is active, the fitted curve overrides ML as the primary distance source. ML serves as the fallback for uncalibrated deployments.
+
+---
+
 ## End-to-End Telemetry Data Flow
 
 ```mermaid
