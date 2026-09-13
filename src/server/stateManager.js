@@ -5,6 +5,7 @@ import { TrajectoryEngine } from './trajectoryEngine.js';
 import { CalibrationEngine } from './calibrationEngine.js';
 import { MLEstimator } from './mlEstimator.js';
 import { SignalFilter } from './signalFilter.js';
+import { RangeCalibrator } from './rangeCalibrator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const configPath = path.resolve(__dirname, '../../config/default.json');
@@ -69,6 +70,36 @@ export class StateManager {
 
     // Phase 8: Temporal median filter for RSSI/SNR before ML inference
     this.signalFilter = new SignalFilter(this.config);
+
+    // v5: two-point range calibrator — fits the real path-loss curve from two
+    // known helmet placements; the fitted curve then drives every distance.
+    this.rangeCalibrator = new RangeCalibrator(this.config);
+    this.rangeCalibrator.onEvent = (severity, message) => this.addEvent(severity, message);
+    this.rangeCalibrator.onLock = (data) => this.saveRangeCal(data);
+
+    // v4/v5: persisted calibrations (locked map geometry + fitted range curve)
+    // restore ONLY in live hardware modes — a simulator session must never
+    // inherit live-hardware calibrations (keeps simulator demos/tests on the
+    // preset narrative geometry, deterministic regardless of leftover files).
+    const persistentLiveMode = ['node1', 'node1_wifi', 'hardware', 'serial']
+      .includes((this.config.hardware && this.config.hardware.data_source) || '');
+    if (persistentLiveMode) {
+      const savedGeo = this._loadMapGeometry();
+      if (savedGeo && savedGeo.distances
+          && this.trajectoryEngine.applyLockedGeometry(savedGeo.distances, savedGeo.locked_at)) {
+        this.events.unshift({
+          id: `evt_geo_${Date.now()}`,
+          timestamp: Date.now(),
+          timeStr: new Date().toTimeString().split(' ')[0],
+          severity: 'INFO',
+          message: `Calibrated map geometry restored (locked ${new Date(savedGeo.locked_at || Date.now()).toLocaleTimeString()})`
+        });
+      }
+      const savedRC = this._loadRangeCal();
+      if (savedRC && this.rangeCalibrator.restore(savedRC)) {
+        this.calibrationEngine.disableHelmetOffset = true;
+      }
+    }
 
     // Phase 2 + Phase 3A: Network & Route State Initialization
     this.initNetworkState();
@@ -573,14 +604,19 @@ export class StateManager {
       console.error('Calibration engine error:', err);
     }
 
-    // Phase 5: trajectory update (dead reckoning + RAW anchor fusion —
-    // display distances never feed the trajectory)
+    // v5: two-point range calibration sampling (closes its own window) and
+    // the display-offset gate — offsets only apply to the uncalibrated model.
     try {
-      this.trajectoryEngine.update(telemetry, this);
+      this.rangeCalibrator.sample(telemetry);
     } catch (err) {
-      console.error('Trajectory engine error:', err);
+      console.error('Range calibrator error:', err);
     }
+    this.calibrationEngine.disableHelmetOffset = this.rangeCalibrator.isCalibrated();
 
+    // v3: ML inference runs BEFORE the trajectory update — the user-validated
+    // calculated distances then drive BOTH the display layer AND the route-map
+    // anchor fusion (raw relay ranges stay as the per-anchor fallback).
+    let mlMap = {};
     if (telemetry.network) {
       if (telemetry.network.connected_node) {
         this.connectedNode = telemetry.network.connected_node;
@@ -588,7 +624,6 @@ export class StateManager {
       if (Array.isArray(telemetry.network.links)) {
         const links = telemetry.network.links;
         if (this.mlEstimator.isReady()) {
-          const mlMap = {};
           const inferencePromises = links.map(async (link) => {
             if (link.rssi != null && link.status !== 'DISCONNECTED' && !link.hide_metrics && link.id !== 'link_node02_node01') {
               const rawRssi = link.rssi;
@@ -615,6 +650,24 @@ export class StateManager {
         }
         this.updateNetworkTelemetry(this.calibrationEngine.applyToLinks(links));
       }
+    }
+
+    // Phase 5/v3: trajectory update — dead reckoning from the helmet IMU
+    // (accelerometer step odometry + magnetometer heading), anchor fusion on
+    // the ML-calculated distances (raw relay range as per-anchor fallback).
+    // ML enrichment applies in LIVE hardware modes only — the model was
+    // trained on live-helmet radio values; simulator-mode synthetic RSSI
+    // would saturate it (1–2 m) and collapse the demo's narrative anchors.
+    // v5: when a two-point range calibration is active, the bridge already
+    // provides fitted-curve anchor distances (measured on the real hardware)
+    // — the saturating ML estimate must not override them.
+    const liveMode = ['node1', 'node1_wifi', 'hardware', 'serial']
+      .includes((this.config.hardware && this.config.hardware.data_source) || '');
+    const useMlAnchors = liveMode && !this.rangeCalibrator.isCalibrated();
+    try {
+      this.trajectoryEngine.update(useMlAnchors ? this.enrichAnchorsWithML(telemetry, mlMap) : telemetry, this);
+    } catch (err) {
+      console.error('Trajectory engine error:', err);
     }
 
     // Phase 6: spatial readouts follow the display distances (locked or live model)
@@ -843,6 +896,106 @@ export class StateManager {
     return routeMap;
   }
 
+  // v4: replace anchor ranges with the ML-calculated distances when available.
+  // Per-anchor raw relay range stays the fallback (model not ready, inference
+  // failed, or prediction outside the validated 1–20 m band).
+  enrichAnchorsWithML(telemetry, mlMap) {
+    const anchorLink = { NODE01: 'link_helmet_node01', NODE02: 'link_helmet_node02', NODE03: 'link_helmet_node03' };
+    const anchors = Array.isArray(telemetry && telemetry.anchors) ? telemetry.anchors : null;
+    if (!anchors || !mlMap || Object.keys(mlMap).length === 0) return telemetry;
+    let changed = false;
+    const enriched = anchors.map(a => {
+      const linkId = anchorLink[a.id];
+      const ml = linkId ? mlMap[linkId] : null;
+      if (ml && ml.method === 'ml' && ml.distance != null && ml.distance > 0 && ml.inRange !== false) {
+        changed = true;
+        return { ...a, distance: ml.distance, source: 'ml' };
+      }
+      return a;
+    });
+    return changed ? { ...telemetry, anchors: enriched } : telemetry;
+  }
+
+  // ── v4: map geometry persistence ────────────────────────────────────────────
+
+  _mapGeometryPath() {
+    const t = this.config.trajectory || {};
+    return t.map_geometry_file
+      ? path.resolve(t.map_geometry_file)
+      : path.resolve(__dirname, '../../config/map_geometry.json');
+  }
+
+  saveMapGeometry(data) {
+    try {
+      fs.writeFileSync(this._mapGeometryPath(), JSON.stringify(data, null, 2));
+      return true;
+    } catch (err) {
+      console.error('Map geometry save failed:', err.message);
+      return false;
+    }
+  }
+
+  clearMapGeometryFile() {
+    try {
+      const p = this._mapGeometryPath();
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+      return true;
+    } catch (err) {
+      console.error('Map geometry clear failed:', err.message);
+      return false;
+    }
+  }
+
+  _loadMapGeometry() {
+    try {
+      const p = this._mapGeometryPath();
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch (err) {
+      console.error('Map geometry load failed:', err.message);
+    }
+    return null;
+  }
+
+  // ── v5: range calibration persistence ───────────────────────────────────────
+
+  _rangeCalPath() {
+    const rc = this.config.range_calibration || {};
+    return rc.file
+      ? path.resolve(rc.file)
+      : path.resolve(__dirname, '../../config/range_calibration.json');
+  }
+
+  saveRangeCal(data) {
+    try {
+      fs.writeFileSync(this._rangeCalPath(), JSON.stringify(data, null, 2));
+      return true;
+    } catch (err) {
+      console.error('Range calibration save failed:', err.message);
+      return false;
+    }
+  }
+
+  clearRangeCalFile() {
+    try {
+      const p = this._rangeCalPath();
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+      return true;
+    } catch (err) {
+      console.error('Range calibration clear failed:', err.message);
+      return false;
+    }
+  }
+
+  _loadRangeCal() {
+    try {
+      const p = this._rangeCalPath();
+      if (fs.existsSync(p)) return JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch (err) {
+      console.error('Range calibration load failed:', err.message);
+    }
+    return null;
+  }
+
   getFullState() {
     const elapsedSec = this.lastSeen ? Math.max(0, Math.floor((Date.now() - this.lastSeen) / 1000)) : null;
     const onlineNodesCount = this.nodes.filter(n => n.status === 'ONLINE').length;
@@ -887,6 +1040,7 @@ export class StateManager {
       },
       route_map: this.applyCalibrationToRouteMap(this.trajectoryEngine.getState()),
       calibration: this.calibrationEngine.getState(),
+      range_cal: this.rangeCalibrator.getState(),
       events: this.events.slice(0, 20),
       thresholds: this.config.thresholds
     };

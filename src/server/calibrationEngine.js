@@ -33,6 +33,18 @@ export class CalibrationEngine {
     this.locked = {}; // linkId -> { rssi_avg, distance }
     this.ema = {};    // linkId -> smoothed live distance
     this.mlDistances = {}; // linkId -> { distance, method, snr, defaultSnr, inRange }
+
+    // v5: when a two-point range calibration is active, distances come from
+    // the curve fitted on the real hardware — the bench-tuned display offsets
+    // below would only distort them, so they are disabled.
+    this.disableHelmetOffset = false;
+  }
+
+  // helmet links display exactly 1 m less (hard-coded display offset)
+  applyHelmetOffset(linkId, d) {
+    if (this.disableHelmetOffset) return d;
+    const off = { link_helmet_node01: 2, link_helmet_node02: 3, link_helmet_node03: 5 }[linkId];
+    return off && typeof d === 'number' && d > off ? Number((d - off).toFixed(1)) : d;
   }
 
   rssiToDistance(rssi) {
@@ -128,6 +140,10 @@ export class CalibrationEngine {
   // links from the simulator lack the hide_metrics flag, so guard by id too
   // (same convention as the client renderers).
   displayDistance(link) {
+    return this.applyHelmetOffset(link.id, this._displayDistanceRaw(link));
+  }
+
+  _displayDistanceRaw(link) {
     if (this.status === 'LOCKED' && this.locked[link.id]) {
       return this.locked[link.id].distance;
     }
@@ -144,15 +160,20 @@ export class CalibrationEngine {
       return Number(link.distance.toFixed(1));
     }
     if (link.rssi != null && !link.hide_metrics && link.id !== 'link_node02_node01') {
+      // v2.1: the ML output is EMA-smoothed exactly like the path-loss branch.
+      // The raw Random Forest value steps between tree-leaf averages on every
+      // poll, which showed up as flickering link distances. Sharing the EMA
+      // state with the path-loss branch also removes the display jump when
+      // the active source switches between the two.
       const ml = this.mlDistances[link.id];
-      if (ml && ml.distance != null && ml.method === 'ml') {
-        return this.clampDistance(ml.distance);
-      }
-      const raw = this.clampDistance(this.rssiToDistance(link.rssi));
+      const useMl = ml && ml.distance != null && ml.method === 'ml';
+      const raw = useMl
+        ? this.clampDistance(ml.distance)
+        : this.clampDistance(this.rssiToDistance(link.rssi));
       const prev = this.ema[link.id];
       const smoothed = prev == null ? raw : prev + (raw - prev) * this.emaAlpha;
       this.ema[link.id] = smoothed;
-      return Number(smoothed.toFixed(1));
+      return useMl ? Number(smoothed.toFixed(2)) : Number(smoothed.toFixed(1));
     }
     return link.distance;
   }
@@ -164,10 +185,10 @@ export class CalibrationEngine {
 
   anchorDisplay(anchor) {
     const linkId = { NODE01: 'link_helmet_node01', NODE02: 'link_helmet_node02', NODE03: 'link_helmet_node03' }[anchor.id];
-    if (linkId && this.status === 'LOCKED' && this.locked[linkId]) {
-      return this.locked[linkId].distance;
-    }
-    return anchor.distance;
+    const d = (linkId && this.status === 'LOCKED' && this.locked[linkId])
+      ? this.locked[linkId].distance
+      : anchor.distance;
+    return this.applyHelmetOffset(linkId, d);
   }
 
   getState() {

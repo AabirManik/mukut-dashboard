@@ -90,6 +90,11 @@
       <div class="map-controls">
         <button class="map-ctrl-btn" id="btnFitView" type="button">FIT VIEW</button>
         <button class="map-ctrl-btn" id="btnFollowMiner" type="button">FOLLOW MINER</button>
+        <button class="map-ctrl-btn" id="btnSetHeading" type="button" title="Miner faces into the tunnel, then press: the current magnetometer heading becomes 0° (tunnel-forward)">SET HEADING 0°</button>
+        <button class="map-ctrl-btn" id="btnRangeCal1" type="button" title="Step 1: hold the helmet EXACTLY 1 m from NODE 2, keep it still, then press — 8 s averaging">RANGE CAL · 1m</button>
+        <button class="map-ctrl-btn" id="btnRangeCal3" type="button" title="Step 2: then hold the helmet EXACTLY 3 m from NODE 2 and press — fits the real distance curve on your hardware">RANGE CAL · 3m</button>
+        <button class="map-ctrl-btn" id="btnCalibrateMap" type="button" title="Keep all nodes stationary for 8 s: the measured inter-node distances are averaged once, the map geometry is rebuilt from the real node placement, and locked">CALIBRATE MAP</button>
+        <button class="map-ctrl-btn" id="btnClearMapCal" type="button" title="Discard the locked map geometry and range curve; return to preset">CLEAR CAL</button>
         <span class="map-zoom-tag" id="zoomTag">100%</span>
         <span class="map-zoom-tag" style="color: #94a3b8;">DRAG TO PAN · SCROLL TO ZOOM</span>
       </div>

@@ -1,26 +1,25 @@
 {
-  "model_name": "MUKUT Distance Estimator",
+  "model_name": "MUKUT Distance Estimator v2",
   "model_type": "RandomForestRegressor",
   "framework": "scikit-learn",
   "features": ["rssi_dbm", "snr_db"],
   "feature_order": ["RSSI (dBm)", "SNR (dB)"],
   "target": "distance_m",
-  "training_distances_m": [1, 2, 3, 5, 10, 15, 20],
-  "validated_range_m": { "min": 1, "max": 20 },
-  "excluded_data": "30m measurements intentionally excluded",
-  "performance": {
-    "MAE": 0.5095,
-    "RMSE": 1.1044,
-    "R_squared": 0.9667
-  },
+  "training_data": "Salvora LoRa GPS dataset (2647 rows) + MUKUT hardware (60 rows)",
+  "training_distances_m": [3, 5, 10, 50, 100, 500, 1000, 2000, 3000, 5000, 6656],
+  "validated_range_m": { "min": 3, "max": 6656 },
   "preprocessing": "None — raw RSSI and SNR fed directly as float32[2]",
+  "input_name": "float_input",
+  "output_name": "variable",
   "input_shape": [1, 2],
   "output_shape": [1, 1],
-  "conversion": "scikit-learn joblib → ONNX (skl2onnx, target_opset=14)",
+  "conversion": "scikit-learn joblib → ONNX (skl2onnx)",
   "notes": [
+    "v2 model trained on Salvora outdoor long-range + MUKUT hardware close-range",
     "ML distances replace path-loss model in display layer only",
     "Trajectory engine always receives RAW telemetry",
-    "30m not in training set — do not claim accuracy beyond 20m",
-    "SNR defaults to RSSI-derived estimate until hardware sends real SNR"
+    "v5 fitted range calibration overrides ML when active",
+    "SNR defaults to RSSI-derived estimate (SNR = RSSI*0.15+16.5) until hardware sends real SNR",
+    "Model input name is 'float_input' (different from v1)"
   ]
 }

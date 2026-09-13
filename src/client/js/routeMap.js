@@ -68,6 +68,11 @@
 
     btnFitView: document.getElementById('btnFitView'),
     btnFollowMiner: document.getElementById('btnFollowMiner'),
+    btnSetHeading: document.getElementById('btnSetHeading'),
+    btnRangeCal1: document.getElementById('btnRangeCal1'),
+    btnRangeCal3: document.getElementById('btnRangeCal3'),
+    btnCalibrateMap: document.getElementById('btnCalibrateMap'),
+    btnClearMapCal: document.getElementById('btnClearMapCal'),
     zoomTag: document.getElementById('zoomTag'),
 
     activeModeDisplay: document.getElementById('activeModeDisplay'),
@@ -203,7 +208,20 @@
       elements.routeMapHeroCard.classList.add(rm.tracking ? 'status-normal' : 'status-warning');
     }
     if (elements.routeMapCanvasStatus) {
-      elements.routeMapCanvasStatus.textContent = rm.moving ? '[ PLOTTING — TRAJECTORY GROWING ]' : '[ MAP READY ]';
+      // v4/v5: reflect the dynamic map geometry + range-curve state
+      const geo = rm.geometry;
+      const rc = state.range_cal;
+      if (rc && rc.capture) {
+        elements.routeMapCanvasStatus.textContent = `[ RANGE CAL — HOLD HELMET ${rc.capture.distance_m}m FROM NODE 2 · ${rc.capture.samples} SAMPLES ]`;
+      } else if (geo && geo.calibrating) {
+        elements.routeMapCanvasStatus.textContent = '[ MAP CALIBRATING — KEEP NODES STATIONARY ]';
+      } else if (rc && rc.calibrated) {
+        elements.routeMapCanvasStatus.textContent = `[ RANGE CURVE LOCKED — A ${rc.A} dBm · n ${rc.n} ]`;
+      } else if (geo && geo.source === 'calibrated' && geo.distances) {
+        elements.routeMapCanvasStatus.textContent = `[ MAP LOCKED — N1↔N2 ${geo.distances.n1_n2_m}m · N2↔N3 ${geo.distances.n2_n3_m}m · N1↔N3 ${geo.distances.n1_n3_m}m ]`;
+      } else {
+        elements.routeMapCanvasStatus.textContent = rm.moving ? '[ PLOTTING — TRAJECTORY GROWING ]' : '[ MAP READY — RUN RANGE CAL FOR ACCURATE DISTANCES ]';
+      }
     }
     if (elements.waypointCountDisplay) {
       elements.waypointCountDisplay.textContent = `${rm.waypoint_count} WAYPOINTS PLOTTED`;
@@ -460,8 +478,12 @@
     }
 
     // ── Anchor beacon nodes ─────────────────────────────────────
-    if (Array.isArray(rm.anchors)) {
-      rm.anchors.forEach(a => {
+    // v4: node markers come from the active geometry (preset or calibrated
+    // layout) — always present; beacon-range anchors may lag behind.
+    const nodeMarkers = (rm.geometry && Array.isArray(rm.geometry.nodes) && rm.geometry.nodes.length > 0)
+      ? rm.geometry.nodes
+      : (Array.isArray(rm.anchors) ? rm.anchors : []);
+    nodeMarkers.forEach(a => {
         const x = toX(a.x);
         const y = toY(a.y);
 
@@ -488,9 +510,10 @@
 
         ctx.font = '500 8px JetBrains Mono, monospace';
         ctx.fillStyle = '#475569';
-        ctx.fillText(`${a.distance.toFixed(1)} m`, x, y + 26);
+        if (typeof a.distance === 'number') {
+          ctx.fillText(`${a.distance.toFixed(1)} m`, x, y + 26);
+        }
       });
-    }
 
     // ── Breadcrumb trajectory ───────────────────────────────────
     if (Array.isArray(rm.path) && rm.path.length >= 2) {
@@ -702,6 +725,114 @@
       elements.btnFollowMiner.addEventListener('click', () => {
         view.follow = !view.follow;
         setFollowButton();
+      });
+    }
+
+    // v3: SET HEADING — miner faces into the tunnel, press, the current
+    // helmet magnetometer heading becomes the new 0° (tunnel-forward).
+    if (elements.btnSetHeading) {
+      elements.btnSetHeading.addEventListener('click', async () => {
+        try {
+          const response = await fetch('/api/trajectory/heading-zero', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}'
+          });
+          const result = await response.json();
+          if (elements.routeMapCanvasStatus) {
+            elements.routeMapCanvasStatus.textContent = (response.ok && result.success)
+              ? `[ HEADING ZERO SET — MAG ${result.raw_heading_deg}° → 0° (OFFSET ${result.heading_offset_deg}°) ]`
+              : `[ HEADING CAL FAILED — ${result.error || 'unreachable'} ]`;
+          }
+        } catch (err) {
+          console.error('Heading zero calibration failed:', err);
+          if (elements.routeMapCanvasStatus) {
+            elements.routeMapCanvasStatus.textContent = '[ HEADING CAL FAILED — SERVER UNREACHABLE ]';
+          }
+        }
+      });
+    }
+
+    // v4: CALIBRATE MAP — 8 s ceremony measuring inter-node distances; the
+    // averaged result rebuilds the map geometry from the real node placement
+    // and locks it (persisted across restarts). CLEAR MAP returns to preset.
+    if (elements.btnCalibrateMap) {
+      elements.btnCalibrateMap.addEventListener('click', async () => {
+        try {
+          if (elements.routeMapCanvasStatus) {
+            elements.routeMapCanvasStatus.textContent = '[ MAP CALIBRATING — KEEP NODES STATIONARY ]';
+          }
+          const response = await fetch('/api/trajectory/calibrate-map', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'start' })
+          });
+          const result = await response.json();
+          if (!response.ok || !result.success) {
+            if (elements.routeMapCanvasStatus) {
+              elements.routeMapCanvasStatus.textContent = `[ MAP CAL FAILED — ${result.error || 'unreachable'} ]`;
+            }
+          }
+        } catch (err) {
+          console.error('Map calibration failed:', err);
+          if (elements.routeMapCanvasStatus) {
+            elements.routeMapCanvasStatus.textContent = '[ MAP CAL FAILED — SERVER UNREACHABLE ]';
+          }
+        }
+      });
+    }
+    // v5: RANGE CAL — two-point fit on the real hardware. Hold the helmet at
+    // the stated distance from NODE 2, keep still, press. After both points
+    // every live distance uses the measured curve.
+    const rangeCalCapture = async (point, distanceM) => {
+      try {
+        if (elements.routeMapCanvasStatus) {
+          elements.routeMapCanvasStatus.textContent = `[ RANGE CAL — HOLD HELMET ${distanceM}m FROM NODE 2 · KEEP STILL ]`;
+        }
+        const response = await fetch('/api/range-cal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'capture', point, distance_m: distanceM })
+        });
+        const result = await response.json();
+        if (!response.ok || !result.success) {
+          if (elements.routeMapCanvasStatus) {
+            elements.routeMapCanvasStatus.textContent = `[ RANGE CAL FAILED — ${result.error || 'unreachable'} ]`;
+          }
+        } else if (result.calibrated) {
+          if (elements.routeMapCanvasStatus) {
+            elements.routeMapCanvasStatus.textContent = `[ RANGE CURVE LOCKED — A ${result.A} dBm · n ${result.n} ]`;
+          }
+        }
+      } catch (err) {
+        console.error('Range calibration failed:', err);
+        if (elements.routeMapCanvasStatus) {
+          elements.routeMapCanvasStatus.textContent = '[ RANGE CAL FAILED — SERVER UNREACHABLE ]';
+        }
+      }
+    };
+    if (elements.btnRangeCal1) {
+      elements.btnRangeCal1.addEventListener('click', () => rangeCalCapture(1, 1));
+    }
+    if (elements.btnRangeCal3) {
+      elements.btnRangeCal3.addEventListener('click', () => rangeCalCapture(2, 3));
+    }
+    if (elements.btnClearMapCal) {
+      elements.btnClearMapCal.addEventListener('click', async () => {
+        try {
+          await fetch('/api/trajectory/calibrate-map', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'clear' })
+          });
+          await fetch('/api/range-cal', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'clear' })
+          });
+        } catch (err) {
+          console.error('Calibration clear failed:', err);
+        }
       });
     }
     setFollowButton();

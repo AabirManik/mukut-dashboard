@@ -22,6 +22,8 @@ export class Node1Bridge {
     this.demoted = false;
     this.lastValidSliderPct = null;
     this.lastRelayLog = {};
+    this.smooth = {};
+    this.stickyDist = {};
   }
 
   // Live-measurement validators. Each returns the value only when it is a genuine
@@ -37,6 +39,23 @@ export class Node1Bridge {
     return (typeof v === 'number' && Number.isFinite(v) && v > 0) ? v : null;
   }
 
+  // v4: mirrors node1.ino calculateDistance(rssi, false) — the gateway's
+  // static profile for node-to-node ranging (ref −45 dBm @ 1 m, exponent
+  // 2.2, sub-metre branch, 30 m cap). Used as the fallback for the N1↔N2 /
+  // N1↔N3 mesh distances when the firmware does not expose its own computed
+  // ranges yet.
+  static staticLinkDistance(rssi) {
+    if (rssi == null || rssi === 0 || rssi < -120) return null;
+    const ref = -45.0;
+    const ple = 2.2;
+    if (rssi > ref) {
+      const sub = 1.0 - ((rssi - ref) * 0.05);
+      return sub < 0.1 ? 0.1 : sub;
+    }
+    const d = Math.pow(10, (ref - rssi) / (10 * ple));
+    return d > 30 ? 30 : d;
+  }
+
   // Debug telemetry log — emitted only when a relay's values change, so the
   // 1.5 s poll cadence does not flood the console.
   _logRelay(tag, values) {
@@ -48,6 +67,39 @@ export class Node1Bridge {
     if (this.lastRelayLog[tag] === line) return;
     this.lastRelayLog[tag] = line;
     console.log(`[${tag} TELEMETRY] ${line}`);
+  }
+
+  // v2.1: EMA smoothing for the true relay-measured link values. The gateway
+  // copies them straight from LoRa packets (no node1-side smoothing), so the
+  // raw numbers jitter visibly on the dashboard and destabilize the ML
+  // inputs. α ≈ 0.45 stays responsive while killing the flicker. A null input
+  // (link down / no measurement) resets the state.
+  _ema(key, value, alpha = 0.45) {
+    if (value == null) {
+      delete this.smooth[key];
+      return null;
+    }
+    const prev = this.smooth[key];
+    const out = prev == null ? value : prev + (value - prev) * alpha;
+    this.smooth[key] = out;
+    return out;
+  }
+
+  // v2.1: sticky display distances — hold the last valid relay reading for up
+  // to 3 s when the current one is momentarily absent but the link is still
+  // up. Prevents the display from jumping between the relay distance and the
+  // ML/path-loss fallback when a single packet drops a field.
+  _stickyDist(key, value, linkUp, maxAgeMs = 3000) {
+    if (value != null) {
+      this.stickyDist[key] = { value, at: Date.now() };
+      return value;
+    }
+    const held = this.stickyDist[key];
+    if (linkUp && held && (Date.now() - held.at) <= maxAgeMs) {
+      return held.value;
+    }
+    if (held) delete this.stickyDist[key];
+    return null;
   }
 
   translate(node1) {
@@ -82,7 +134,10 @@ export class Node1Bridge {
     const n1Snr = Node1Bridge.validSnr(helmetDirect.snr_db);
     const n2Snr = Node1Bridge.validSnr(node2Relay.snr_db);
     const n3Snr = Node1Bridge.validSnr(node3Relay.snr_db);
-    const n1DistHelmet = isHelmetOnline ? Node1Bridge.validDist(miner.total_distance_m) : null;
+    // v3: NODE01 anchor / helmet→N1 distance = the gateway's REAL direct range
+    // (node1's own RSSI ranging). miner.total_distance_m (step ODOMETRY) must
+    // never be used as a range — it is DR input only (motion.distance_walked_m).
+    const n1DistHelmet = isHelmetOnline ? Node1Bridge.validDist(helmetDirect.distance_to_helmet_m) : null;
     const n2DistHelmet = isNode2Online ? Node1Bridge.validDist(node2Relay.distance_to_helmet_m) : null;
     const n3DistHelmet = isNode3Online ? Node1Bridge.validDist(node3Relay.distance_to_helmet_m) : null;
     const n2DistN3 = Node1Bridge.validDist(node2Relay.distance_to_node3_m)
@@ -94,12 +149,13 @@ export class Node1Bridge {
     // values are used as fallback (backward compatible).
     const n2HelmLink = node2Relay.helmet_link !== undefined ? Boolean(node2Relay.helmet_link) : null;
     const n3HelmLink = node3Relay.helmet_link !== undefined ? Boolean(node3Relay.helmet_link) : null;
-    const n2HelmRssi = n2HelmLink === true ? Node1Bridge.validRssi(node2Relay.helmet_rssi_db) : null;
-    const n2HelmSnr = n2HelmLink === true ? Node1Bridge.validSnr(node2Relay.helmet_snr_db) : null;
-    const n3HelmRssi = n3HelmLink === true ? Node1Bridge.validRssi(node3Relay.helmet_rssi_db) : null;
-    const n3HelmSnr = n3HelmLink === true ? Node1Bridge.validSnr(node3Relay.helmet_snr_db) : null;
-    const n3PeerRssi = isNode3Online ? Node1Bridge.validRssi(node3Relay.peer_rssi_db) : null;
-    const n3PeerSnr = isNode3Online ? Node1Bridge.validSnr(node3Relay.peer_snr_db) : null;
+    // v2.1: EMA-smoothed (raw packet copies jitter — see _ema)
+    const n2HelmRssi = this._ema('n2HelmRssi', n2HelmLink === true ? Node1Bridge.validRssi(node2Relay.helmet_rssi_db) : null);
+    const n2HelmSnr = this._ema('n2HelmSnr', n2HelmLink === true ? Node1Bridge.validSnr(node2Relay.helmet_snr_db) : null);
+    const n3HelmRssi = this._ema('n3HelmRssi', n3HelmLink === true ? Node1Bridge.validRssi(node3Relay.helmet_rssi_db) : null);
+    const n3HelmSnr = this._ema('n3HelmSnr', n3HelmLink === true ? Node1Bridge.validSnr(node3Relay.helmet_snr_db) : null);
+    const n3PeerRssi = this._ema('n3PeerRssi', isNode3Online ? Node1Bridge.validRssi(node3Relay.peer_rssi_db) : null);
+    const n3PeerSnr = this._ema('n3PeerSnr', isNode3Online ? Node1Bridge.validSnr(node3Relay.peer_snr_db) : null);
 
     // The helmet is alive when the gateway hears it directly OR any relay
     // reports a live helmet link (deep-tunnel relay-only operation).
@@ -112,14 +168,61 @@ export class Node1Bridge {
     const hN2Up = isHelmetAlive && isNode2Online && (n2HelmLink !== null ? n2HelmLink : true);
     const hN3Up = isHelmetAlive && isNode3Online && (n3HelmLink !== null ? n3HelmLink : true);
 
+    // v2.1: sticky display distances — hold the last valid reading briefly on
+    // momentary gaps (see _stickyDist). Anchors stay RAW for the trajectory
+    // engine (G18) — stickiness is display-layer only.
+    const n2DistHelmetD = this._stickyDist('n2DistHelmet', n2DistHelmet, hN2Up);
+    const n3DistHelmetD = this._stickyDist('n3DistHelmet', n3DistHelmet, hN3Up);
+    const n2DistN3D = this._stickyDist('n2DistN3', n2DistN3, isNode3Online && isNode2Online);
+
+    // v5: when a two-point range calibration is active, the curve fitted on
+    // the REAL hardware takes priority over every other distance source —
+    // firmware path-loss (boot-baseline miscalibrated), the static profile,
+    // and the saturating ML model. All radios are the same family, so the
+    // fitted curve converts any live RSSI accurately.
+    const rangeCal = (this.stateManager && this.stateManager.rangeCalibrator) || null;
+    const fitted = (rssi) => (rangeCal && rangeCal.isCalibrated() && rssi != null)
+      ? rangeCal.fittedDistance(rssi)
+      : null;
+    const n1DistFitted = fitted(n1Rssi);      // helmet → N1 direct
+    const n2DistFitted = fitted(n2HelmRssi);  // helmet → N2 true link
+    const n3DistFitted = fitted(n3HelmRssi);  // helmet → N3 true link
+    const n1n2Fitted = fitted(n2Rssi);        // N2→N1 trunk
+    const n1n3Fitted = fitted(n3Rssi);        // N3→N1 trunk
+    const n2n3Fitted = fitted(n3PeerRssi);    // N3's radio view of N2
+
+    // Effective helmet distances: fitted curve first, then the relay/sticky
+    // value as fallback (uncalibrated operation keeps the previous behavior).
+    const n1DistHelmetEff = n1DistFitted != null ? n1DistFitted : n1DistHelmet;
+    const n2DistHelmetEff = n2DistFitted != null ? n2DistFitted : n2DistHelmetD;
+    const n3DistHelmetEff = n3DistFitted != null ? n3DistFitted : n3DistHelmetD;
+
+    // v4: measured inter-node mesh geometry — drives the dynamic map
+    // calibration. N2↔N3 is the firmware-calibrated relay measurement;
+    // N1↔N2 / N1↔N3 prefer the gateway's own computed ranges (new firmware)
+    // and fall back to the same static profile node1 uses (old firmware).
+    // v5: the fitted curve (when calibrated) outranks all of them.
+    const n1n2 = n1n2Fitted
+      ?? Node1Bridge.validDist(node2Relay.distance_to_node1_m)
+      ?? (n2Rssi != null ? Node1Bridge.staticLinkDistance(n2Rssi) : null);
+    const n1n3 = n1n3Fitted
+      ?? Node1Bridge.validDist(node3Relay.distance_to_node1_m)
+      ?? (n3Rssi != null ? Node1Bridge.staticLinkDistance(n3Rssi) : null);
+    const n2n3 = n2n3Fitted != null ? n2n3Fitted : n2DistN3D;
+    const meshGeometry = {
+      n1_n2_m: n1n2 != null ? Number(n1n2.toFixed(1)) : null,
+      n2_n3_m: n2n3 != null ? Number(n2n3.toFixed(1)) : null,
+      n1_n3_m: n1n3 != null ? Number(n1n3.toFixed(1)) : null
+    };
+
     // Route mapping — two-anchor position between Node 2 and Node 3.
     // When BOTH live anchor distances are valid, the physical ratio
     // D2 / (D2 + D3) (0% = at Node 2, 100% = at Node 3) takes priority;
     // while anchors are unavailable, retain the last valid position rather
     // than jumping on the firmware's step-driven slider.
     let sliderPct;
-    if (n2DistHelmet != null && n3DistHelmet != null && (n2DistHelmet + n3DistHelmet) > 0) {
-      sliderPct = Math.min(100, Math.max(0, (n2DistHelmet / (n2DistHelmet + n3DistHelmet)) * 100));
+    if (n2DistHelmetEff != null && n3DistHelmetEff != null && (n2DistHelmetEff + n3DistHelmetEff) > 0) {
+      sliderPct = Math.min(100, Math.max(0, (n2DistHelmetEff / (n2DistHelmetEff + n3DistHelmetEff)) * 100));
       this.lastValidSliderPct = sliderPct;
     } else if (this.lastValidSliderPct != null) {
       sliderPct = this.lastValidSliderPct;
@@ -153,7 +256,7 @@ export class Node1Bridge {
         ? (n3PeerRssi != null ? n3PeerRssi : n3Rssi)
         : -100,
       snr: n3PeerSnr != null ? n3PeerSnr : n3Snr,
-      distance: n2DistN3,
+      distance: n2DistN3D,
       status: (isNode3Online && isNode2Online) ? 'CONNECTED' : 'DISCONNECTED',
       available: (isNode3Online && isNode2Online)
     };
@@ -167,7 +270,7 @@ export class Node1Bridge {
       destination: 'NODE03',
       rssi: hN3Up ? (n3HelmRssi != null ? n3HelmRssi : n3Rssi) : -100,
       snr: n3HelmSnr != null ? n3HelmSnr : n3Snr,
-      distance: n3DistHelmet != null ? Math.round(n3DistHelmet * 10) / 10 : null,
+      distance: n3DistHelmetEff != null ? Math.round(n3DistHelmetEff * 10) / 10 : null,
       status: hN3Up ? 'CONNECTED' : 'DISCONNECTED',
       available: hN3Up
     };
@@ -179,7 +282,7 @@ export class Node1Bridge {
       destination: 'NODE02',
       rssi: hN2Up ? (n2HelmRssi != null ? n2HelmRssi : n2Rssi) : -100,
       snr: n2HelmSnr != null ? n2HelmSnr : n2Snr,
-      distance: n2DistHelmet != null ? Math.round(n2DistHelmet * 10) / 10 : null,
+      distance: n2DistHelmetEff != null ? Math.round(n2DistHelmetEff * 10) / 10 : null,
       status: hN2Up ? 'CONNECTED' : 'DISCONNECTED',
       available: hN2Up
     };
@@ -191,7 +294,7 @@ export class Node1Bridge {
       destination: 'NODE01',
       rssi: hN1Up ? n1Rssi : -100,
       snr: n1Snr,
-      distance: n1DistHelmet,
+      distance: n1DistHelmetEff != null ? Math.round(n1DistHelmetEff * 10) / 10 : n1DistHelmet,
       status: hN1Up ? 'CONNECTED' : 'DISCONNECTED',
       available: hN1Up
     };
@@ -214,9 +317,9 @@ export class Node1Bridge {
     this._logRelay('NODE3', { rssi: n3Rssi, snr: n3Snr, distHelmet: n3DistHelmet });
 
     const anchorsList = [];
-    if (n1DistHelmet != null) anchorsList.push({ id: 'NODE01', distance: n1DistHelmet });
-    if (n2DistHelmet != null) anchorsList.push({ id: 'NODE02', distance: n2DistHelmet });
-    if (n3DistHelmet != null) anchorsList.push({ id: 'NODE03', distance: n3DistHelmet });
+    if (n1DistHelmetEff != null) anchorsList.push({ id: 'NODE01', distance: n1DistHelmetEff });
+    if (n2DistHelmetEff != null) anchorsList.push({ id: 'NODE02', distance: n2DistHelmetEff });
+    if (n3DistHelmetEff != null) anchorsList.push({ id: 'NODE03', distance: n3DistHelmetEff });
 
     // Synchronize Node availability in StateManager
     if (this.stateManager) {
@@ -252,14 +355,14 @@ export class Node1Bridge {
       const spatial = {
         nearest_node: nearestNode,
         relative_slider_pct: sliderPct,
-        dist_n2: n2DistHelmet != null ? n2DistHelmet : -1.0,
-        dist_n3: n3DistHelmet != null ? n3DistHelmet : -1.0,
+        dist_n2: n2DistHelmetEff != null ? n2DistHelmetEff : -1.0,
+        dist_n3: n3DistHelmetEff != null ? n3DistHelmetEff : -1.0,
         rssi_n2: n2HelmRssi != null ? n2HelmRssi : n2Rssi,
         rssi_n3: n3HelmRssi != null ? n3HelmRssi : n3Rssi
       };
       // fixed_dist (physical N2↔N3 separation) only from a live reading —
       // otherwise the previously stored value is retained (never a default)
-      if (n2DistN3 != null) spatial.fixed_dist = n2DistN3;
+      if (n2DistN3D != null) spatial.fixed_dist = n2DistN3D;
       this.stateManager.updateSpatialPosition(spatial);
 
       // 2. Update network links immediately
@@ -318,6 +421,7 @@ export class Node1Bridge {
       },
       orientation: { heading: typeof miner.heading_deg === 'number' ? miner.heading_deg : 0 },
       anchors: anchorsList,
+      mesh_geometry: meshGeometry,
       network: {
         connected_node: connectedNode,
         active_route: sys.active_route || '',

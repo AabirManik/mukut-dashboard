@@ -1,6 +1,7 @@
 // v2 bridge verification: helmet-link semantics, fallback, demote/restore
 import { StateManager } from '../src/server/stateManager.js';
 import { Node1Bridge } from '../src/server/node1Bridge.js';
+import { CalibrationEngine } from '../src/server/calibrationEngine.js';
 
 const sm = new StateManager();
 const bridge = new Node1Bridge(sm, '192.168.14.60', 1500);
@@ -91,6 +92,41 @@ const nodes5 = Object.fromEntries(sm.nodes.map(n => [n.id, n]));
 check('S4 NODE02 restored by next poll', nodes5.NODE02.status === 'ONLINE');
 const links5 = Object.fromEntries(sm.links.map(l => [l.id, l]));
 check('S4 helmet->N3 restored by next poll', links5.link_helmet_node03.status === 'CONNECTED');
+
+// ---- Scenario 5: v2.1 anti-flicker (EMA + sticky distances + ML smoothing) ----
+const mk = (rssiH, distH) => {
+  const p = JSON.parse(JSON.stringify(v2b));
+  p.mesh_topology.node2_relay.helmet_rssi_db = rssiH;
+  p.mesh_topology.node2_relay.distance_to_helmet_m = distH;
+  return p;
+};
+
+// 5a: EMA damps raw helmet-link RSSI jumps
+const rssiSeq = [-72.4, -60.0, -84.0, -61.0];
+const outs = rssiSeq.map(r => {
+  bridge.translate(mk(r, 1.6));
+  return sm.links.find(l => l.id === 'link_helmet_node02').rssi;
+});
+check('S5 EMA damps RSSI jump 1', Math.abs(outs[1] - outs[0]) < Math.abs(rssiSeq[1] - rssiSeq[0]), `out Δ=${(outs[1] - outs[0]).toFixed(2)} vs raw Δ=${(rssiSeq[1] - rssiSeq[0]).toFixed(2)}`);
+check('S5 EMA damps RSSI jump 2', Math.abs(outs[2] - outs[1]) < Math.abs(rssiSeq[2] - rssiSeq[1]), `out Δ=${(outs[2] - outs[1]).toFixed(2)} vs raw Δ=${(rssiSeq[2] - rssiSeq[1]).toFixed(2)}`);
+
+// 5b: sticky distance holds on a momentary gap (link still up)
+bridge.translate(mk(-72.4, 1.6));
+const d1 = sm.links.find(l => l.id === 'link_helmet_node02').distance;
+bridge.translate(mk(-72.4, 0.0)); // 0.0 → no valid reading this packet
+const d2 = sm.links.find(l => l.id === 'link_helmet_node02').distance;
+check('S5 sticky distance holds on gap', d1 === 1.6 && d2 === 1.6, `d1=${d1} d2=${d2}`);
+
+// 5c: ML distance output is EMA-smoothed (no raw RF leaf jumps).
+// Uses _displayDistanceRaw — the pre-offset core — so the EMA behavior is
+// observed directly (the helmet display offset is asserted in v3 Group 6).
+const calEng = new CalibrationEngine(sm.getConfig());
+const fakeLink = { id: 'link_helmet_node02', rssi: -70, status: 'CONNECTED', available: true };
+calEng.setMLDistances({ link_helmet_node02: { distance: 5, method: 'ml' } });
+const m1 = calEng._displayDistanceRaw(fakeLink);
+calEng.setMLDistances({ link_helmet_node02: { distance: 1, method: 'ml' } });
+const m2 = calEng._displayDistanceRaw(fakeLink);
+check('S5 ML distance EMA-smoothed', m1 === 5 && m2 === 4, `m1=${m1} m2=${m2}`);
 
 console.log(`\n${pass} passed, ${fail} failed`);
 sm.destroy();

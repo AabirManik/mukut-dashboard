@@ -152,7 +152,15 @@ console.log('\n[TEST GROUP 2] Trajectory Engine:');
 // 3. Simulator Journey Tests
 console.log('\n[TEST GROUP 3] Simulator Journey:');
 {
-  const sm = new StateManager();
+  // Simulator-mode config: this group feeds SIMULATOR telemetry, so the
+  // state manager must not treat it as live-hardware data (G33 — ML anchor
+  // enrichment only applies in live modes; the saturating model on synthetic
+  // RSSI would corrupt the journey's narrative anchors, and whether the ONNX
+  // session finishes loading mid-loop made the old default-config run racy).
+  const simConfig = JSON.parse(fs.readFileSync(
+    path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../config/default.json'), 'utf8'));
+  simConfig.hardware = { ...(simConfig.hardware || {}), data_source: 'simulator' };
+  const sm = new StateManager(simConfig);
   const sim = new TelemetrySimulator(sm, 100);
 
   assert.ok(sim.geoValid, 'Simulator must load map geometry from config');
@@ -218,7 +226,10 @@ console.log('\n[TEST GROUP 3] Simulator Journey:');
 // 4. State & Node1 Bridge Integration
 console.log('\n[TEST GROUP 4] State & Bridge Integration:');
 {
-  const sm = new StateManager();
+  const simConfig = JSON.parse(JSON.stringify(config));
+  simConfig.hardware = simConfig.hardware || {};
+  simConfig.hardware.data_source = 'simulator';
+  const sm = new StateManager(simConfig);
   const target = { x: 20, y: 5 };
   const packet = {
     version: '1.0',

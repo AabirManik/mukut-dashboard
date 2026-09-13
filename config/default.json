@@ -126,6 +126,11 @@
   "signal_filter": {
     "window_size": 5
   },
+  "range_calibration": {
+    "capture_window_ms": 8000,
+    "reference_link": "link_helmet_node02",
+    "min_samples": 3
+  },
   "thresholds": {
     "methane": {
       "name": "Methane",

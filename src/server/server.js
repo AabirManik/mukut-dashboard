@@ -158,6 +158,68 @@ app.get('/api/calibrate', (req, res) => {
   res.json(stateManager.calibrationEngine.getState());
 });
 
+// Route Mapping Control (v3 — SET HEADING runtime calibration)
+// Miner faces "into the tunnel" (+x), the control is pressed, and whatever
+// the helmet magnetometer reports at that moment becomes the new heading zero.
+app.post('/api/trajectory/heading-zero', (req, res) => {
+  const result = stateManager.trajectoryEngine.setHeadingZero();
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+  stateManager.addEvent('INFO', `Heading zero calibrated — magnetometer ${result.raw_heading_deg}° set as tunnel-forward (offset ${result.heading_offset_deg}°)`);
+  stateManager.notifyListeners('STATE_UPDATE', stateManager.getFullState());
+  res.json({ ...result, route_map: stateManager.getFullState().route_map });
+});
+
+// Route Mapping Control (v4 — dynamic map calibration)
+// 8-second ceremony: samples the measured inter-node distances, rebuilds the
+// map geometry from the REAL node placement, locks it (persisted across
+// restarts). action 'clear' returns to the preset config layout.
+app.post('/api/trajectory/calibrate-map', (req, res) => {
+  const action = (req.body && req.body.action) || 'start';
+  if (action === 'clear') {
+    stateManager.trajectoryEngine.clearMapCalibration();
+    stateManager.clearMapGeometryFile();
+    stateManager.addEvent('INFO', 'Map geometry cleared — reverting to preset layout');
+    stateManager.notifyListeners('STATE_UPDATE', stateManager.getFullState());
+    return res.json({ success: true, route_map: stateManager.getFullState().route_map });
+  }
+  const result = stateManager.trajectoryEngine.startMapCalibration();
+  if (!result.started) {
+    return res.status(400).json({ success: false, error: result.reason });
+  }
+  stateManager.addEvent('INFO', `Map calibration started — measuring inter-node distances for ${result.duration_ms / 1000} s (keep all nodes stationary)`);
+  stateManager.notifyListeners('STATE_UPDATE', stateManager.getFullState());
+  res.json({ success: true, ...result });
+});
+
+// Range Calibration Control (v5 — two-point live path-loss fit)
+// Hold the helmet at a known distance from NODE 2, POST {action:'capture',
+// point:1|2, distance_m} — 8 s averaging per point. After both points the
+// real path-loss curve (A, n) is fitted and drives every live distance.
+// action 'clear' discards the curve.
+app.post('/api/range-cal', (req, res) => {
+  const action = (req.body && req.body.action) || 'capture';
+  if (action === 'clear') {
+    stateManager.rangeCalibrator.clear();
+    stateManager.clearRangeCalFile();
+    stateManager.calibrationEngine.disableHelmetOffset = false;
+    stateManager.addEvent('INFO', 'Range calibration cleared — distances revert to firmware/model sources');
+    stateManager.notifyListeners('STATE_UPDATE', stateManager.getFullState());
+    return res.json({ success: true, range_cal: stateManager.rangeCalibrator.getState() });
+  }
+  const point = req.body && req.body.point;
+  const distanceM = req.body && req.body.distance_m;
+  const result = stateManager.rangeCalibrator.startCapture(point, distanceM);
+  if (!result.started) {
+    return res.status(400).json({ success: false, error: result.reason });
+  }
+  stateManager.addEvent('INFO',
+    `Range calibration point ${point} — hold the helmet EXACTLY ${distanceM} m from NODE 2 for ${(result.duration_ms / 1000).toFixed(0)} s (keep it still)`);
+  stateManager.notifyListeners('STATE_UPDATE', stateManager.getFullState());
+  res.json({ success: true, ...result });
+});
+
 // Page Routes
 app.get('/', (req, res) => {
   res.sendFile(path.resolve(__dirname, '../client/index.html'));

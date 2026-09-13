@@ -89,7 +89,7 @@ console.log('\n[TEST GROUP 2] Calibration Engine:');
   console.log('  ✓ Display layer: locked values applied, trunk untouched');
 
   assert.strictEqual(eng.anchorDisplay({ id: 'NODE03', distance: 18 }), eng.locked['link_helmet_node03'].distance, 'NODE03 anchor must show locked value');
-  assert.strictEqual(eng.anchorDisplay({ id: 'NODE01', distance: 75.9 }), 75.9, 'Unlocked anchor passes through');
+  assert.strictEqual(eng.anchorDisplay({ id: 'NODE01', distance: 75.9 }), 73.9, 'Unlocked anchor passthrough minus the NODE01 helmet display offset (2 m)');
   console.log('  ✓ Anchor display: NODE03 locked, unlocked nodes passthrough');
 
   const eng2 = new CalibrationEngine(config);
@@ -116,7 +116,7 @@ console.log('\n[TEST GROUP 3] State & Pipeline Integration:');
   let state = sm.getFullState();
   let hn3 = state.network.links.find(l => l.id === 'link_helmet_node03');
   assert.ok(hn3.distance > 0, `IDLE distances follow the live (sim/firmware) distance (got ${hn3.distance})`);
-  assert.strictEqual(hn3.distance, 18, 'Live distance (18) takes priority over model estimate');
+  assert.strictEqual(hn3.distance, 13, 'Live distance (18) takes priority over model estimate, minus the helmet display offset (−5)');
   const trunkLink = state.network.links.find(l => l.id === 'link_node02_node01');
   assert.strictEqual(trunkLink.distance, 52, 'Trunk distance must pass through untouched (sim raw value, no model)');
   assert.strictEqual(state.calibration.status, 'IDLE');

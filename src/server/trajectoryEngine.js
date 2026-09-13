@@ -1,10 +1,17 @@
 /**
- * MUKUT Trajectory Engine (Phase 5 — Route Mapping)
- * Fuses pedestrian dead reckoning (heading + distance walked) with anchor
- * beacon ranges (distance to fixed relay nodes) into a live 2D trajectory.
+ * MUKUT Trajectory Engine (Phase 5 / v3 — Route Mapping)
+ * Fuses pedestrian dead reckoning (magnetometer heading + accelerometer step
+ * odometry, both fetched from the helmet) with anchor beacon ranges into a
+ * live 2D trajectory. Anchor ranges are the ML-calculated distances
+ * (stateManager.enrichAnchorsWithML) with raw relay ranges as fallback.
  *
- * Map frame: metres. x = deeper into the tunnel, y = lateral (right bend positive).
- * Heading convention: degrees, 0 = +x, increasing toward +y (counter-clockwise).
+ * Map frame: metres. x = deeper into the tunnel, y = lateral (right side
+ * positive when walking in). Heading convention (v3 — tunnel-relative,
+ * CLOCKWISE, matching the helmet's compass-style QMC5883L output read against
+ * the tunnel axis): 0° = walking deeper in (+x), 90° = right turn (+y),
+ * 180° = back toward the entrance, 270° = left turn. `heading_offset_deg`
+ * (or the SET HEADING runtime control) aligns whatever the magnetometer
+ * currently reports as "forward" with 0°.
  * Tunnel polyline is derived from node map_pos entries + a working-face extension.
  */
 
@@ -23,26 +30,62 @@ export function computeTunnelGeometry(config) {
   const relay = ['NODE01', 'NODE02', 'NODE03'].map(id => anchors.find(a => a.id === id)).filter(Boolean);
   const polyline = relay.map(a => ({ x: a.x, y: a.y }));
   if (polyline.length >= 2) {
-    const n = polyline.length;
-    const last = polyline[n - 1];
-    const prev = polyline[n - 2];
-    const dx = last.x - prev.x;
-    const dy = last.y - prev.y;
-    const len = Math.hypot(dx, dy) || 1;
-    polyline.push({ x: last.x + (dx / len) * faceExt, y: last.y + (dy / len) * faceExt });
+    extendPolyline(polyline, faceExt);
   }
 
+  return finishGeometry(anchors, polyline);
+}
+
+// v4: extend the polyline beyond its last point (working-face direction).
+function extendPolyline(polyline, ext) {
+  const n = polyline.length;
+  const last = polyline[n - 1];
+  const prev = polyline[n - 2];
+  const dx = last.x - prev.x;
+  const dy = last.y - prev.y;
+  const len = Math.hypot(dx, dy) || 1;
+  polyline.push({ x: last.x + (dx / len) * ext, y: last.y + (dy / len) * ext });
+}
+
+function finishGeometry(anchors, polyline) {
   const cumulative = [0];
   for (let i = 1; i < polyline.length; i++) {
     cumulative.push(cumulative[i - 1] + Math.hypot(polyline[i].x - polyline[i - 1].x, polyline[i].y - polyline[i - 1].y));
   }
-
   return {
     anchors,
     polyline,
     cumulative,
     totalLength: cumulative.length ? cumulative[cumulative.length - 1] : 0
   };
+}
+
+// v4: DYNAMIC map geometry — builds the node layout from the MEASURED
+// inter-node distances instead of the preset config map_pos values, so the
+// map reflects where the nodes are physically placed.
+//   NODE01 at the origin (surface reference), NODE02 along +x at d12,
+//   NODE03 trilaterated from (d12, d23, d13) onto the +y side (right bend).
+// The face extension is capped relative to the real scale so a small physical
+// layout does not get an oversized narrative tail.
+export function buildGeometryFromDistances(d12, d23, d13, faceExtCfg) {
+  if (![d12, d23, d13].every(v => typeof v === 'number' && Number.isFinite(v) && v > 0)) {
+    return null;
+  }
+  // NODE03: classic two-anchor circle intersection
+  let x3 = (d12 * d12 + d13 * d13 - d23 * d23) / (2 * d12);
+  // clamp inside the corridor span & keep the triangle non-degenerate
+  x3 = Math.max(0.05 * d12, Math.min(0.95 * d12, x3));
+  const y3 = Math.sqrt(Math.max(d13 * d13 - x3 * x3, Math.pow(0.1 * d13, 2)));
+
+  const anchors = [
+    { id: 'NODE01', x: 0, y: 0 },
+    { id: 'NODE02', x: d12, y: 0 },
+    { id: 'NODE03', x: Number(x3.toFixed(3)), y: Number(y3.toFixed(3)) }
+  ];
+  const polyline = anchors.map(a => ({ x: a.x, y: a.y }));
+  const ext = Math.min(faceExtCfg, Math.max(2, (d12 + d23) * 0.5));
+  extendPolyline(polyline, ext);
+  return finishGeometry(anchors, polyline);
 }
 
 function trilaterate(anchorSet, guess) {
@@ -87,6 +130,18 @@ export class TrajectoryEngine {
     this.corridorWidth = typeof t.corridor_width_m === 'number' ? t.corridor_width_m : 8;
     this.surfaceThreshold = typeof t.surface_threshold_m === 'number' ? t.surface_threshold_m : 10;
     this.headingOffset = typeof t.heading_offset_deg === 'number' ? t.heading_offset_deg : 0;
+    this.faceExtCfg = t.face_extension_m > 0 ? t.face_extension_m : 18;
+
+    // v4: dynamic map calibration — an 8 s ceremony (matching the firmware's
+    // ANCHOR_CAL_SILENCE_MS boot window) that samples the measured inter-node
+    // distances, averages them ONCE, rebuilds the map geometry from the real
+    // node placement, and locks it. Locked geometry survives resets and
+    // (via stateManager) server restarts.
+    this.mapCalDurationMs = t.map_calibration_ms > 0 ? t.map_calibration_ms : 8000;
+    this.mapCal = { status: 'IDLE', startedAt: null, samples: { n1_n2: [], n2_n3: [], n1_n3: [] } };
+    this.geometrySource = 'preset';
+    this.measuredDistances = null;
+    this.geometryLockedAt = null;
 
     this.geo = computeTunnelGeometry(this.config);
     this.reset();
@@ -95,6 +150,7 @@ export class TrajectoryEngine {
   reset() {
     this.position = null;
     this.heading = null;
+    this.lastRawHeading = null;
     this.path = [];
     this.distanceWalked = 0;
     this.lastWalkedInput = null;
@@ -106,6 +162,7 @@ export class TrajectoryEngine {
     this.enteredTunnel = false;
     this.resyncFlagged = false;
     this.lastAnchors = [];
+    this.anchorEma = {};
     this.distanceFromSurface = null;
   }
 
@@ -141,6 +198,147 @@ export class TrajectoryEngine {
     };
   }
 
+  // v3: solve an anchor set — Gauss-Newton trilateration for 3+ ranges,
+  // two-circle intersection for exactly 2. `ref` seeds the solver and breaks
+  // the two-candidate ambiguity (nearest candidate wins); when null (first
+  // fix) the corridor-preferred candidate is chosen.
+  solveAnchors(anchors, ref) {
+    if (!Array.isArray(anchors) || anchors.length >= 3) {
+      return Array.isArray(anchors) && anchors.length >= 3
+        ? trilaterate(anchors, ref || { x: 0, y: 0 })
+        : null;
+    }
+    if (anchors.length === 2) return this.solveTwoAnchors(anchors[0], anchors[1], ref);
+    return null;
+  }
+
+  // v3: two-circle intersection. Non-intersecting circles (range error) fall
+  // back to the point on the line of centres at the a-range proportion.
+  solveTwoAnchors(a, b, ref) {
+    const dx = b.x - a.x, dy = b.y - a.y;
+    const d = Math.hypot(dx, dy);
+    if (d < 1e-6 || !(a.distance > 0) || !(b.distance > 0)) return null;
+    if (a.distance + b.distance < d || Math.abs(a.distance - b.distance) > d) {
+      const t = Math.max(0, Math.min(1, a.distance / d));
+      return { x: a.x + dx * t, y: a.y + dy * t };
+    }
+    const aa = (a.distance * a.distance - b.distance * b.distance + d * d) / (2 * d);
+    const h = Math.sqrt(Math.max(0, a.distance * a.distance - aa * aa));
+    const mx = a.x + (aa / d) * dx;
+    const my = a.y + (aa / d) * dy;
+    const c1 = { x: mx + (h / d) * dy, y: my - (h / d) * dx };
+    const c2 = { x: mx - (h / d) * dy, y: my + (h / d) * dx };
+    if (!ref) {
+      return this.projectOntoPolyline(c1).dist <= this.projectOntoPolyline(c2).dist ? c1 : c2;
+    }
+    return Math.hypot(c1.x - ref.x, c1.y - ref.y) <= Math.hypot(c2.x - ref.x, c2.y - ref.y) ? c1 : c2;
+  }
+
+  // v3: SET HEADING runtime calibration — the miner faces "into the tunnel"
+  // (+x) and the control is pressed: whatever the magnetometer reports right
+  // now becomes the new zero. Runtime-only (config heading_offset_deg remains
+  // the boot default); effective from the next telemetry packet.
+  setHeadingZero() {
+    if (this.lastRawHeading == null) {
+      return { success: false, error: 'No magnetometer heading received yet' };
+    }
+    this.headingOffset = (360 - this.lastRawHeading) % 360;
+    return {
+      success: true,
+      raw_heading_deg: this.lastRawHeading,
+      heading_offset_deg: this.headingOffset,
+      applied_heading_deg: 0
+    };
+  }
+
+  // ── v4: dynamic map calibration ────────────────────────────────────────────
+
+  // Start the 8 s ceremony. Keep all nodes stationary while it runs — the
+  // measured inter-node distances are averaged once and locked at the end.
+  startMapCalibration() {
+    if (this.mapCal.status === 'RUNNING') {
+      return { started: false, reason: 'map calibration already running' };
+    }
+    this.mapCal = { status: 'RUNNING', startedAt: Date.now(), samples: { n1_n2: [], n2_n3: [], n1_n3: [] } };
+    return { started: true, duration_ms: this.mapCalDurationMs };
+  }
+
+  // Discard the locked geometry and return to the preset config layout.
+  clearMapCalibration() {
+    this.mapCal = { status: 'IDLE', startedAt: null, samples: { n1_n2: [], n2_n3: [], n1_n3: [] } };
+    this.geometrySource = 'preset';
+    this.measuredDistances = null;
+    this.geometryLockedAt = null;
+    this.geo = computeTunnelGeometry(this.config);
+    this.reset();
+    return { cleared: true };
+  }
+
+  // Apply a previously persisted locked geometry (server restart).
+  applyLockedGeometry(distances, lockedAt) {
+    if (!distances) return false;
+    const geo = buildGeometryFromDistances(
+      distances.n1_n2_m, distances.n2_n3_m, distances.n1_n3_m, this.faceExtCfg
+    );
+    if (!geo) return false;
+    this.geo = geo;
+    this.mapCal.status = 'LOCKED';
+    this.geometrySource = 'calibrated';
+    this.measuredDistances = { ...distances };
+    this.geometryLockedAt = lockedAt || Date.now();
+    return true;
+  }
+
+  sampleMeshGeometry(telemetry) {
+    const mg = telemetry && telemetry.mesh_geometry;
+    if (!mg) return;
+    const take = (key, v) => {
+      if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+        this.mapCal.samples[key].push(v);
+        if (this.mapCal.samples[key].length > 200) this.mapCal.samples[key].shift();
+      }
+    };
+    take('n1_n2', mg.n1_n2_m);
+    take('n2_n3', mg.n2_n3_m);
+    take('n1_n3', mg.n1_n3_m);
+  }
+
+  // Average the sampled inter-node distances, rebuild the geometry from the
+  // REAL node placement, lock it, reset the trajectory (fresh fix in the new
+  // frame), and persist via the stateManager hook.
+  finalizeMapCalibration(stateManager) {
+    const avg = (arr) => arr.length ? arr.reduce((a, b) => a + b, 0) / arr.length : null;
+    const d12 = avg(this.mapCal.samples.n1_n2);
+    const d23 = avg(this.mapCal.samples.n2_n3);
+    const d13 = avg(this.mapCal.samples.n1_n3);
+    const lock = () => {
+      const distances = {
+        n1_n2_m: Number(d12.toFixed(2)),
+        n2_n3_m: Number(d23.toFixed(2)),
+        n1_n3_m: Number(d13.toFixed(2))
+      };
+      if (!this.applyLockedGeometry(distances, Date.now())) return false;
+      this.reset(); // fresh fix in the new frame on this same update
+      if (stateManager) {
+        stateManager.addEvent('INFO',
+          `Map geometry LOCKED from measured placement — N1↔N2 ${distances.n1_n2_m} m · N2↔N3 ${distances.n2_n3_m} m · N1↔N3 ${distances.n1_n3_m} m`);
+        if (typeof stateManager.saveMapGeometry === 'function') {
+          stateManager.saveMapGeometry({ distances, locked_at: this.geometryLockedAt });
+        }
+      }
+      return true;
+    };
+    if (d12 != null && d23 != null && d13 != null) {
+      if (lock()) return { locked: true, distances: this.measuredDistances };
+    }
+    this.mapCal = { status: 'IDLE', startedAt: null, samples: { n1_n2: [], n2_n3: [], n1_n3: [] } };
+    if (stateManager) {
+      stateManager.addEvent('WARNING',
+        'Map calibration failed — no inter-node distance samples received (check that the gateway reports node ranges)');
+    }
+    return { locked: false };
+  }
+
   collectAnchors(telemetry) {
     const list = Array.isArray(telemetry && telemetry.anchors) ? telemetry.anchors : [];
     const out = [];
@@ -155,13 +353,40 @@ export class TrajectoryEngine {
 
   update(telemetry, stateManager) {
     const now = Date.now();
+
+    // v4: map calibration sampling — runs BEFORE anchor collection so a
+    // just-locked geometry is already in effect for this update's first fix.
+    if (this.mapCal.status === 'RUNNING') {
+      this.sampleMeshGeometry(telemetry);
+      if (now - this.mapCal.startedAt >= this.mapCalDurationMs) {
+        this.finalizeMapCalibration(stateManager);
+      }
+    }
+
     const motion = (telemetry && telemetry.motion) || {};
     const orient = (telemetry && telemetry.orientation) || {};
     const anchors = this.collectAnchors(telemetry);
+
+    // v3: EMA-smooth the anchor ranges (per anchor id) — raw per-poll ranges
+    // (ML or relay) jitter and would wobble the fused position. An anchor that
+    // drops out of this packet resets its state.
+    const seen = new Set();
+    for (const a of anchors) {
+      seen.add(a.id);
+      const prev = this.anchorEma[a.id];
+      if (prev != null) a.distance = prev + (a.distance - prev) * 0.35;
+      this.anchorEma[a.id] = a.distance;
+    }
+    for (const id of Object.keys(this.anchorEma)) {
+      if (!seen.has(id)) delete this.anchorEma[id];
+    }
     this.lastAnchors = anchors;
 
     let heading = typeof orient.heading === 'number' && Number.isFinite(orient.heading) ? orient.heading : null;
-    if (heading != null) heading = (heading + this.headingOffset + 360000) % 360;
+    if (heading != null) {
+      this.lastRawHeading = heading;
+      heading = (heading + this.headingOffset + 360000) % 360;
+    }
 
     let delta = 0;
     if (typeof motion.distance_walked_m === 'number' && Number.isFinite(motion.distance_walked_m)) {
@@ -178,11 +403,11 @@ export class TrajectoryEngine {
     this.moving = Boolean(motion.moving) || delta > 0.01;
 
     if (this.position == null) {
-      if (anchors.length >= 3) {
-        const solved = trilaterate(anchors, { x: 0, y: 0 });
-        if (Number.isFinite(solved.x) && Number.isFinite(solved.y) && Math.hypot(solved.x, solved.y) < 500) {
-          this.position = solved;
-        }
+      // v3: 3+ ranges → trilateration; exactly 2 → circle intersection
+      // (corridor-preferred candidate). Fewer than 2 → surface default.
+      const solved = this.solveAnchors(anchors, null);
+      if (solved && Number.isFinite(solved.x) && Number.isFinite(solved.y) && Math.hypot(solved.x, solved.y) < 500) {
+        this.position = solved;
       }
       if (this.position == null) this.position = { x: 0, y: 0 };
       this.position = this.clampToCorridor(this.position);
@@ -201,9 +426,12 @@ export class TrajectoryEngine {
     }
     if (heading != null) this.heading = heading;
 
-    if (anchors.length >= 3) {
-      const solved = trilaterate(anchors, this.position);
-      if (Number.isFinite(solved.x) && Number.isFinite(solved.y)) {
+    // v3: anchor correction also engages with exactly 2 ranges (the deep-tunnel
+    // norm: helmet near N2/N3, direct N1 range too weak) — the two-circle
+    // solver picks the candidate nearest the current position for continuity.
+    if (anchors.length >= 2) {
+      const solved = this.solveAnchors(anchors, this.position);
+      if (solved && Number.isFinite(solved.x) && Number.isFinite(solved.y)) {
         const offset = Math.hypot(solved.x - this.position.x, solved.y - this.position.y);
         if (offset < 200) {
           let k = this.correctionStrength;
@@ -280,6 +508,21 @@ export class TrajectoryEngine {
       distance_walked_m: Number(this.distanceWalked.toFixed(1)),
       speed_mps: Number(this.speedMps.toFixed(2)),
       moving: this.moving,
+      heading_offset_deg: this.headingOffset,
+      raw_heading_deg: this.lastRawHeading,
+      geometry: {
+        source: this.geometrySource,
+        calibrating: this.mapCal.status === 'RUNNING',
+        locked_at: this.geometryLockedAt,
+        nodes: this.geo.anchors.map(a => ({ id: a.id, x: a.x, y: a.y })),
+        distances: this.measuredDistances
+          ? {
+              n1_n2_m: this.measuredDistances.n1_n2_m,
+              n2_n3_m: this.measuredDistances.n2_n3_m,
+              n1_n3_m: this.measuredDistances.n1_n3_m
+            }
+          : null
+      },
       tunnel: this.geo.polyline,
       anchors: this.lastAnchors.map(a => ({ id: a.id, x: a.x, y: a.y, distance: Number(a.distance.toFixed(1)) })),
       bounds: {
