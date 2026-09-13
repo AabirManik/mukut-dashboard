@@ -2,6 +2,7 @@ import assert from 'assert';
 import { validateTelemetry } from '../src/server/schema.js';
 import { StateManager } from '../src/server/stateManager.js';
 import { Node1Bridge } from '../src/server/node1Bridge.js';
+import { isolatedConfig } from './helpers/isolated_config.js';
 
 console.log('------------------------------------------------------------');
 console.log(' Running MUKUT Phase 4 Automated Test Suite');
@@ -51,7 +52,7 @@ console.log('\n[TEST GROUP 1] Config Validation:');
 // 2. Node1Bridge Translator Tests
 console.log('\n[TEST GROUP 2] Node1 Bridge Translator:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const bridge = new Node1Bridge(sm, '192.168.4.1', 5000);
 
   // 2.1: Translate normal data
@@ -202,7 +203,7 @@ console.log('\n[TEST GROUP 2] Node1 Bridge Translator:');
 // 3. StateManager Failover with NODE03 Tests
 console.log('\n[TEST GROUP 3] Failover with NODE03:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
 
   // Verify initial route goes through NODE02 (primary path)
   const initState = sm.getFullState();
@@ -232,7 +233,7 @@ console.log('\n[TEST GROUP 3] Failover with NODE03:');
 // 4. Full Pipeline Test: Node1 Data → StateManager → WebSocket State
 console.log('\n[TEST GROUP 4] Full Pipeline (Node1 → StateManager → State):');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const bridge = new Node1Bridge(sm, '192.168.4.1', 5000);
 
   const node1Payload = {

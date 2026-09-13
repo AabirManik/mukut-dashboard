@@ -220,6 +220,25 @@ app.post('/api/range-cal', (req, res) => {
   res.json({ success: true, ...result });
 });
 
+// Route Tracking Control (v6 — session start/stop)
+// START: fresh session — path cleared, position re-fixes from relay beacons;
+// from then on the route draws itself as the miner moves (step odometry when
+// present, beacon signal + proximity pull when accelerometer data is absent).
+// STOP: freeze the trajectory (calibrations keep running).
+app.post('/api/tracking', (req, res) => {
+  const action = (req.body && req.body.action) || 'start';
+  if (action === 'stop') {
+    const result = stateManager.trajectoryEngine.stopTracking();
+    stateManager.addEvent('INFO', 'Route tracking paused — trajectory frozen');
+    stateManager.notifyListeners('STATE_UPDATE', stateManager.getFullState());
+    return res.json({ success: true, session: result, route_map: stateManager.getFullState().route_map });
+  }
+  const result = stateManager.trajectoryEngine.startTracking();
+  stateManager.addEvent('INFO', 'Route tracking session started — position re-fixing from relay beacons');
+  stateManager.notifyListeners('STATE_UPDATE', stateManager.getFullState());
+  res.json({ success: true, session: result, route_map: stateManager.getFullState().route_map });
+});
+
 // Page Routes
 app.get('/', (req, res) => {
   res.sendFile(path.resolve(__dirname, '../client/index.html'));

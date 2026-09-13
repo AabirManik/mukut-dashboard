@@ -2,6 +2,7 @@ import assert from 'assert';
 import { validateTelemetry } from '../src/server/schema.js';
 import { StateManager } from '../src/server/stateManager.js';
 import { TelemetrySimulator } from '../src/server/simulator.js';
+import { isolatedConfig } from './helpers/isolated_config.js';
 
 console.log('------------------------------------------------------------');
 console.log(' Running MUKUT Phase 1 Automated Test Suite');
@@ -42,7 +43,7 @@ console.log('\n[TEST GROUP 1] Schema Validator Tests:');
 // 2. StateManager Evaluation Tests
 console.log('\n[TEST GROUP 2] StateManager & Alert Logic Tests:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
 
   // Test 2.1: Nominal Telemetry
   const nominalTelemetry = {
@@ -113,7 +114,7 @@ console.log('\n[TEST GROUP 2] StateManager & Alert Logic Tests:');
 // 3. Simulator Scenario Tests
 console.log('\n[TEST GROUP 3] Telemetry Simulator Tests:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const sim = new TelemetrySimulator(sm, 100);
 
   // Normal Scenario

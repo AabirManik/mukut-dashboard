@@ -17,18 +17,20 @@ On the **ROUTE MAP** page toolbar:
 | 2 | Hold helmet **exactly 3 m from NODE 2**, keep still → press **RANGE CAL · 3m** | `[ RANGE CURVE LOCKED — A … dBm · n … ]` |
 | 3 | Nodes stationary → press **CALIBRATE MAP** (8 s) | `[ MAP LOCKED — N1↔N2 … · N2↔N3 … · N1↔N3 … ]` |
 | 4 | Wear the helmet, face **into the tunnel** → press **SET HEADING 0°** | `[ HEADING ZERO SET … ]` |
+| 5 | Press **START TRACKING** (if not already active) | `[ TRACKING ACTIVE ]` |
 
-After this, every distance on every page is computed from the curve **fitted on your actual hardware** — walking visibly moves the numbers and the map dot.
+After this, every distance on every page is computed from the curve **fitted on your actual hardware** — walking visibly moves the numbers and the map dot. The route tracks live; when you walk near a node the position **snaps closer** to it (proximity lock).
 
 ## 2. The 3-minute demo script
 
 1. **"This is the MUKUT safety dashboard."** Safety page: worker SAFE, helmet ONLINE, gases NORMAL, live temperature/humidity ticking.
 2. **"Each anchor node measures the miner's distance live."** Network page: RSSI/SNR bars, distances. **Walk slowly toward a node — call out the distance dropping.**
-3. **"The route map tracks the miner underground — no GPS."** Route map: follow the dot; waypoints drop as you walk; the heading arrow turns as you turn.
+3. **"The route map tracks the miner underground — no GPS."** Route map: follow the dot; waypoints drop as you walk; the heading arrow turns as you turn. **When you get close to a node, the dot snaps to the beacon — that's the proximity lock kicking in.**
 4. **"If gas leaks…"** (trigger via your gas scenario/hardware) → dashboard flips to WARNING, event logged.
 5. **"Miner in distress presses SOS."** → EMERGENCY banner, event timeline entry.
 6. **"What if a relay dies?"** **Power off NODE02** → dashboard shows NODE02 OFFLINE within ~5 s, route flips to the bypass (HELMET → NODE03 → NODE01), **FAILOVER ACTIVE**.
-7. **Power NODE02 back on** → network self-heals, route restored. **"Designed for unreliable underground communication."**
+7. **"We can pause and resume tracking anytime."** Press **STOP TRACKING** — path freezes. Walk to a new position. Press **START TRACKING** — tracking resumes from the current beacon fix, no jump.
+8. **Power NODE02 back on** → network self-heals, route restored. **"Designed for unreliable underground communication."**
 
 ## 3. Backup plans
 

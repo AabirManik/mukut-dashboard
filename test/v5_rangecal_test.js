@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { StateManager } from '../src/server/stateManager.js';
 import { RangeCalibrator } from '../src/server/rangeCalibrator.js';
 import { Node1Bridge } from '../src/server/node1Bridge.js';
+import { isolatedConfig } from './helpers/isolated_config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const baseConfig = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../config/default.json'), 'utf8'));
@@ -81,7 +82,7 @@ console.log('\n[GROUP 2] Failure path:');
 // ─── GROUP 3: bridge uses the fitted curve everywhere ───────────────────────
 console.log('\n[GROUP 3] Bridge fitted distances:');
 {
-  const sm = new StateManager(); // live node1 mode
+  const sm = new StateManager(isolatedConfig()); // live node1 mode, persistence isolated
   sm.rangeCalibrator.restore({ A: -50, n: 2.1 });
   const bridge = new Node1Bridge(sm, '192.168.14.60', 1500);
   const payload = {
@@ -111,7 +112,7 @@ console.log('\n[GROUP 3] Bridge fitted distances:');
   check('mesh geometry uses fitted curve', approx(t.mesh_geometry.n1_n2_m, 5.2, 0.2) && approx(t.mesh_geometry.n2_n3_m, 6.1, 0.2) && approx(t.mesh_geometry.n1_n3_m, 1.7, 0.2), JSON.stringify(t.mesh_geometry));
 
   // uncalibrated → previous behavior (relay distances)
-  const sm2 = new StateManager();
+  const sm2 = new StateManager(isolatedConfig());
   const bridge2 = new Node1Bridge(sm2, '192.168.14.60', 1500);
   const t2 = bridge2.translate(payload);
   const l2 = Object.fromEntries(t2.network.links.map(l => [l.id, l]));
@@ -123,7 +124,7 @@ console.log('\n[GROUP 3] Bridge fitted distances:');
 // ─── GROUP 4: pipeline — ML bypass + display offsets disabled ───────────────
 console.log('\n[GROUP 4] Pipeline integration:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   sm.rangeCalibrator.restore({ A: -50, n: 2.1 });
   sm.mlEstimator = {
     isReady: () => true,

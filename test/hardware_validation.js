@@ -8,6 +8,7 @@ import { StateManager } from '../src/server/stateManager.js';
 import { TelemetrySimulator } from '../src/server/simulator.js';
 import { CalibrationEngine } from '../src/server/calibrationEngine.js';
 import { MLEstimator } from '../src/server/mlEstimator.js';
+import { isolate } from './helpers/isolated_config.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -26,7 +27,7 @@ console.log('══════════════════════�
 console.log('');
 
 // ─── Initialize ────────────────────────────────────────────────────────────────
-const sm = new StateManager(config);
+const sm = new StateManager(isolate(config));
 const sim = new TelemetrySimulator(sm);
 const calEng = new CalibrationEngine(config);
 const mlEstimator = new MLEstimator();

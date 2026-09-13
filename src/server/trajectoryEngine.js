@@ -132,6 +132,20 @@ export class TrajectoryEngine {
     this.headingOffset = typeof t.heading_offset_deg === 'number' ? t.heading_offset_deg : 0;
     this.faceExtCfg = t.face_extension_m > 0 ? t.face_extension_m : 18;
 
+    // v6: motion-agnostic correction — with no step displacement this update,
+    // beacons are the only motion signal, so the anchor correction is more
+    // assertive than the gentle drift-correct blend used while walking.
+    this.correctionStrengthAgnostic = typeof t.correction_strength_agnostic === 'number' && t.correction_strength_agnostic > 0
+      ? t.correction_strength_agnostic : 0.35;
+    // v6: proximity pull — the strongest beacon signal within this radius of a
+    // node pulls the map toward that node when the fused position disagrees.
+    this.proximityRadius = typeof t.proximity_radius_m === 'number' && t.proximity_radius_m > 0
+      ? t.proximity_radius_m : 5;
+    this.proximityMismatch = typeof t.proximity_mismatch_m === 'number' && t.proximity_mismatch_m >= 0
+      ? t.proximity_mismatch_m : 1;
+    this.proximityMaxPull = typeof t.proximity_max_pull === 'number' && t.proximity_max_pull > 0 && t.proximity_max_pull <= 1
+      ? t.proximity_max_pull : 0.65;
+
     // v4: dynamic map calibration — an 8 s ceremony (matching the firmware's
     // ANCHOR_CAL_SILENCE_MS boot window) that samples the measured inter-node
     // distances, averages them ONCE, rebuilds the map geometry from the real
@@ -142,6 +156,13 @@ export class TrajectoryEngine {
     this.geometrySource = 'preset';
     this.measuredDistances = null;
     this.geometryLockedAt = null;
+
+    // v6: tracking session — START TRACKING opens a fresh session (path
+    // cleared, position re-fixed from beacons); STOP TRACKING freezes the
+    // trajectory. Default ON preserves the always-on demo behaviour.
+    this.trackingSession = { active: true, startedAt: null };
+    this.proximity = null;        // engaged proximity lock {id, distance_m, pull}
+    this.lastProximityId = null;  // event de-dup across packets
 
     this.geo = computeTunnelGeometry(this.config);
     this.reset();
@@ -249,6 +270,29 @@ export class TrajectoryEngine {
       heading_offset_deg: this.headingOffset,
       applied_heading_deg: 0
     };
+  }
+
+  // ── v6: tracking session ────────────────────────────────────────────────────
+
+  // Open a fresh tracking session: breadcrumb path cleared, position re-fixed
+  // from the next packet's beacons. From then on the route draws itself as the
+  // miner moves — step odometry when present, beacon signal (anchor correction
+  // + proximity pull) when the accelerometer data is absent or unreliable.
+  startTracking() {
+    this.trackingSession = { active: true, startedAt: Date.now() };
+    this.path = [];
+    this.sinceLastWaypoint = 0;
+    this.position = null;
+    this.anchorEma = {};
+    return { active: true, started_at: this.trackingSession.startedAt };
+  }
+
+  // Freeze the trajectory: position and path stop updating. Heading capture,
+  // odometer baselines and the map calibration ceremony keep running so a
+  // later resume is seamless and SET HEADING still works while paused.
+  stopTracking() {
+    this.trackingSession = { active: false, startedAt: null };
+    return { active: false };
   }
 
   // ── v4: dynamic map calibration ────────────────────────────────────────────
@@ -363,18 +407,34 @@ export class TrajectoryEngine {
       }
     }
 
-    const motion = (telemetry && telemetry.motion) || {};
+    const rawMotion = telemetry && telemetry.motion;
+    const motion = rawMotion || {};
     const orient = (telemetry && telemetry.orientation) || {};
     const anchors = this.collectAnchors(telemetry);
+
+    // v6: motion-agnostic mode — the packet carries no accelerometer data at
+    // all; position then follows the beacon signal alone (anchor correction +
+    // proximity pull) and the "moving" flag is derived from map displacement.
+    const motionAbsent = rawMotion == null ||
+      (motion.moving == null && motion.distance_walked_m == null && motion.step_count == null);
 
     // v3: EMA-smooth the anchor ranges (per anchor id) — raw per-poll ranges
     // (ML or relay) jitter and would wobble the fused position. An anchor that
     // drops out of this packet resets its state.
+    // v6: STEP DETECTION — a range that jumps abruptly (> 3 m or half the
+    // previous value) is genuine movement, not jitter: re-seed instead of
+    // smoothing, so walking close to a node engages the proximity pull on the
+    // very next packet instead of ~7 packets of EMA lag.
     const seen = new Set();
     for (const a of anchors) {
       seen.add(a.id);
       const prev = this.anchorEma[a.id];
-      if (prev != null) a.distance = prev + (a.distance - prev) * 0.35;
+      if (prev != null) {
+        const step = Math.abs(a.distance - prev);
+        a.distance = step > Math.max(3, prev * 0.5)
+          ? a.distance
+          : prev + (a.distance - prev) * 0.35;
+      }
       this.anchorEma[a.id] = a.distance;
     }
     for (const id of Object.keys(this.anchorEma)) {
@@ -402,6 +462,14 @@ export class TrajectoryEngine {
     }
     this.moving = Boolean(motion.moving) || delta > 0.01;
 
+    // v6: tracking session gate — while paused the trajectory is frozen, but
+    // heading capture, odometer baselines and the map calibration ceremony
+    // keep running so a resume is seamless.
+    if (!this.trackingSession.active) {
+      this.moving = false;
+      return;
+    }
+
     if (this.position == null) {
       // v3: 3+ ranges → trilateration; exactly 2 → circle intersection
       // (corridor-preferred candidate). Fewer than 2 → surface default.
@@ -414,6 +482,11 @@ export class TrajectoryEngine {
       this.enteredTunnel = this.projectOntoPolyline(this.position).arc > this.surfaceThreshold;
       this.pushWaypoint(now);
     }
+
+    // v6: position BEFORE this update's movement — its total displacement
+    // (DR + anchor correction + proximity pull) drives waypoint growth when
+    // the movement is beacon-driven rather than step-driven.
+    const prevPos = this.position ? { x: this.position.x, y: this.position.y } : null;
 
     if (delta > 0 && heading != null) {
       const rad = heading * Math.PI / 180;
@@ -434,7 +507,11 @@ export class TrajectoryEngine {
       if (solved && Number.isFinite(solved.x) && Number.isFinite(solved.y)) {
         const offset = Math.hypot(solved.x - this.position.x, solved.y - this.position.y);
         if (offset < 200) {
-          let k = this.correctionStrength;
+          // v6: with no step displacement this update (stationary, or no
+          // accelerometer data at all), the beacons are the only motion
+          // signal — correct more assertively so the position tracks
+          // signal-driven movement.
+          let k = delta > 0 ? this.correctionStrength : this.correctionStrengthAgnostic;
           if (offset > this.resyncThreshold) {
             k = 0.5;
             if (!this.resyncFlagged && stateManager) {
@@ -452,7 +529,60 @@ export class TrajectoryEngine {
       }
     }
 
+    // ── v6: proximity pull ────────────────────────────────────────────────────
+    // When the STRONGEST beacon signal says the helmet is within
+    // proximity_radius_m of its node but the fused position DISAGREES (the
+    // geometric distance to that node is far larger than the measured range),
+    // the map is pulled toward the node. The mismatch gate keeps accurate
+    // trilateration untouched — proximity only fixes signal-vs-map
+    // disagreement, which is exactly the close-node inaccuracy case.
+    this.proximity = null;
+    if (anchors.length > 0 && this.position != null) {
+      let best = null;
+      for (const a of anchors) {
+        if (a.distance > 0 && a.distance < this.proximityRadius && (!best || a.distance < best.distance)) {
+          best = a;
+        }
+      }
+      if (best) {
+        const geoDist = Math.hypot(this.position.x - best.x, this.position.y - best.y);
+        const mismatch = geoDist - best.distance;
+        if (mismatch > this.proximityMismatch) {
+          const closeness = 1 - best.distance / this.proximityRadius;
+          const mismatchFactor = Math.min(1, mismatch / this.proximityRadius);
+          const pull = Math.min(this.proximityMaxPull, closeness * this.proximityMaxPull * mismatchFactor);
+          this.position = {
+            x: this.position.x + (best.x - this.position.x) * pull,
+            y: this.position.y + (best.y - this.position.y) * pull
+          };
+          this.proximity = {
+            id: best.id,
+            distance_m: Number(best.distance.toFixed(1)),
+            pull: Number(pull.toFixed(2))
+          };
+          if (this.lastProximityId !== best.id && stateManager) {
+            stateManager.addEvent('INFO', `Proximity lock — ${best.id} beacon signal ${best.distance.toFixed(1)} m: route position snapped toward the relay`);
+          }
+          this.lastProximityId = best.id;
+        } else {
+          this.lastProximityId = null;
+        }
+      } else {
+        this.lastProximityId = null;
+      }
+    }
+
     this.position = this.clampToCorridor(this.position);
+
+    // v6: unified displacement — beacon/proximity-driven movement (beyond the
+    // step-odometry delta already counted) also grows the breadcrumb, so the
+    // route draws itself even with no accelerometer data. In motion-agnostic
+    // mode, real map displacement also raises the moving flag.
+    if (prevPos) {
+      const moved = Math.hypot(this.position.x - prevPos.x, this.position.y - prevPos.y);
+      if (moved > delta) this.sinceLastWaypoint += moved - delta;
+      if (motionAbsent && moved > 0.3) this.moving = true;
+    }
 
     if (this.sinceLastWaypoint >= this.waypointInterval) {
       this.pushWaypoint(now);
@@ -508,6 +638,11 @@ export class TrajectoryEngine {
       distance_walked_m: Number(this.distanceWalked.toFixed(1)),
       speed_mps: Number(this.speedMps.toFixed(2)),
       moving: this.moving,
+      session: {
+        active: this.trackingSession.active,
+        started_at: this.trackingSession.startedAt
+      },
+      proximity: this.proximity,
       heading_offset_deg: this.headingOffset,
       raw_heading_deg: this.lastRawHeading,
       geometry: {

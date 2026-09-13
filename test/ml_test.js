@@ -6,6 +6,7 @@ import { MLEstimator, createMLEstimator } from '../src/server/mlEstimator.js';
 import { CalibrationEngine } from '../src/server/calibrationEngine.js';
 import { StateManager } from '../src/server/stateManager.js';
 import { TelemetrySimulator } from '../src/server/simulator.js';
+import { isolate } from './helpers/isolated_config.js';
 
 console.log('------------------------------------------------------------');
 console.log(' Running MUKUT ML Distance Estimator Test Suite');
@@ -201,7 +202,7 @@ console.log('\n[TEST GROUP 6] CalibrationEngine ML Integration:');
 // ─── TEST GROUP 7: Full Pipeline Integration ──────────────────────────────────
 console.log('\n[TEST GROUP 7] Full Pipeline Integration:');
 {
-  const sm = new StateManager(config);
+  const sm = new StateManager(isolate(config));
   const sim = new TelemetrySimulator(sm);
   sim.setScenario('NORMAL');
 

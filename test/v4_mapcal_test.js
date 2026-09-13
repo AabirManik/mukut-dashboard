@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import { StateManager } from '../src/server/stateManager.js';
 import { TrajectoryEngine, buildGeometryFromDistances } from '../src/server/trajectoryEngine.js';
 import { Node1Bridge } from '../src/server/node1Bridge.js';
+import { isolatedConfig, isolate } from './helpers/isolated_config.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const baseConfig = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../config/default.json'), 'utf8'));
@@ -106,7 +107,7 @@ console.log('\n[GROUP 4] Persistence:');
 {
   const tmpFile = path.join(os.tmpdir(), 'opencode', 'mapcal_test.json');
   try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch {}
-  const cfg = JSON.parse(JSON.stringify(baseConfig));
+  const cfg = isolate(baseConfig); // persistence isolated (incl. range cal)
   cfg.trajectory.map_geometry_file = tmpFile;
 
   const sm1 = new StateManager(cfg);
@@ -125,7 +126,7 @@ console.log('\n[GROUP 4] Persistence:');
 // ─── GROUP 5: bridge mesh_geometry mapping ───────────────────────────────────
 console.log('\n[GROUP 5] Bridge mesh_geometry:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const bridge = new Node1Bridge(sm, '192.168.14.60', 1500);
   const payload = {
     system: { active_route: '', overall_risk_index: 'LOW' },

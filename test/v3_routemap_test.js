@@ -3,6 +3,7 @@
 import { StateManager } from '../src/server/stateManager.js';
 import { TrajectoryEngine } from '../src/server/trajectoryEngine.js';
 import { Node1Bridge } from '../src/server/node1Bridge.js';
+import { isolatedConfig } from './helpers/isolated_config.js';
 
 let pass = 0, fail = 0;
 function check(name, cond, extra = '') {
@@ -14,7 +15,7 @@ const approx = (a, b, tol) => Math.abs(a - b) <= tol;
 // ─── GROUP 1: enrichAnchorsWithML ────────────────────────────────────────────
 console.log('\n[GROUP 1] ML anchor enrichment:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const anchors = [
     { id: 'NODE01', distance: 3.5 },
     { id: 'NODE02', distance: 22.5 },
@@ -44,7 +45,7 @@ console.log('\n[GROUP 1] ML anchor enrichment:');
 // ─── GROUP 2: 2-anchor circle-intersection solve ────────────────────────────
 console.log('\n[GROUP 2] Two-anchor solve:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const eng = new TrajectoryEngine(sm.getConfig());
   // Target P=(40,2): on the corridor, between NODE02 and the entrance
   const P = { x: 40, y: 2 };
@@ -69,7 +70,7 @@ console.log('\n[GROUP 2] Two-anchor solve:');
 // ─── GROUP 3: IMU dead reckoning — clockwise tunnel-relative heading ────────
 console.log('\n[GROUP 3] Helmet IMU dead reckoning:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const eng = new TrajectoryEngine(sm.getConfig());
   // accelerometer odometry: distance_walked_m from the helmet step counter
   eng.update({ motion: { moving: true, distance_walked_m: 0 }, orientation: { heading: 90 } }, null);
@@ -93,7 +94,7 @@ console.log('\n[GROUP 3] Helmet IMU dead reckoning:');
 // ─── GROUP 4: SET HEADING runtime calibration ────────────────────────────────
 console.log('\n[GROUP 4] SET HEADING calibration:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const eng = new TrajectoryEngine(sm.getConfig());
   const fail = eng.setHeadingZero();
   check('calibration rejected before any heading', fail.success === false);
@@ -113,7 +114,7 @@ console.log('\n[GROUP 4] SET HEADING calibration:');
 // ─── GROUP 5: NODE01 anchor uses the REAL direct range ──────────────────────
 console.log('\n[GROUP 5] Bridge NODE01 anchor:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const bridge = new Node1Bridge(sm, '192.168.14.60', 1500);
   const base = {
     system: { active_route: '', overall_risk_index: 'LOW' },
@@ -144,7 +145,7 @@ console.log('\n[GROUP 5] Bridge NODE01 anchor:');
 // ─── GROUP 6: full pipeline — ML distances drive the route map ───────────────
 console.log('\n[GROUP 6] Full pipeline (ML-stubbed, live node1 config):');
 {
-  const sm = new StateManager(); // default config: data_source "node1" → live mode
+  const sm = new StateManager(isolatedConfig()); // live node1 mode, persistence isolated
   sm.mlEstimator = {
     isReady: () => true,
     estimateDistance: async () => ({ distance: 10, method: 'ml', inRange: true, defaultSnr: false })

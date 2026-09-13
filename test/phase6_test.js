@@ -5,6 +5,7 @@ import { fileURLToPath } from 'url';
 import { StateManager } from '../src/server/stateManager.js';
 import { TelemetrySimulator } from '../src/server/simulator.js';
 import { CalibrationEngine } from '../src/server/calibrationEngine.js';
+import { isolatedConfig } from './helpers/isolated_config.js';
 
 console.log('------------------------------------------------------------');
 console.log(' Running MUKUT Phase 6 Automated Test Suite');
@@ -108,7 +109,7 @@ console.log('\n[TEST GROUP 2] Calibration Engine:');
 // 3. StateManager Integration (full pipeline through simulator)
 console.log('\n[TEST GROUP 3] State & Pipeline Integration:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const sim = new TelemetrySimulator(sm, 100);
 
   sim.setScenario('NORMAL');

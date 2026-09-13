@@ -1,6 +1,7 @@
 import assert from 'assert';
 import { StateManager } from '../src/server/stateManager.js';
 import { TelemetrySimulator } from '../src/server/simulator.js';
+import { isolatedConfig } from './helpers/isolated_config.js';
 
 console.log('------------------------------------------------------------');
 console.log(' Running MUKUT Phase 2 Automated Test Suite');
@@ -9,7 +10,7 @@ console.log('------------------------------------------------------------');
 // 1. Network State Model Tests
 console.log('\n[TEST GROUP 1] Network Model & Initialization Tests:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const state = sm.getFullState();
 
   assert.ok(state.network, 'State must contain network object');
@@ -26,7 +27,7 @@ console.log('\n[TEST GROUP 1] Network Model & Initialization Tests:');
 // 2. RSSI Calculation & Quality Evaluation Tests
 console.log('\n[TEST GROUP 2] RSSI & Link Quality Evaluation Tests:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
 
   // Test RSSI interpretation
   const r1 = sm.evaluateRssi(-60);
@@ -52,7 +53,7 @@ console.log('\n[TEST GROUP 2] RSSI & Link Quality Evaluation Tests:');
 // 3. Network Health & Degradation Tests
 console.log('\n[TEST GROUP 3] Network Health & Degradation Tests:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
 
   // Scenario: Link degradation
   sm.updateNetworkTelemetry([
@@ -86,7 +87,7 @@ console.log('\n[TEST GROUP 3] Network Health & Degradation Tests:');
 // 4. Simulator Phase 2 Scenario Tests
 console.log('\n[TEST GROUP 4] Phase 2 Network Simulator Tests:');
 {
-  const sm = new StateManager();
+  const sm = new StateManager(isolatedConfig());
   const sim = new TelemetrySimulator(sm, 100);
 
   // Normal Network

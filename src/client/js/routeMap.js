@@ -68,6 +68,7 @@
 
     btnFitView: document.getElementById('btnFitView'),
     btnFollowMiner: document.getElementById('btnFollowMiner'),
+    btnToggleTracking: document.getElementById('btnToggleTracking'),
     btnSetHeading: document.getElementById('btnSetHeading'),
     btnRangeCal1: document.getElementById('btnRangeCal1'),
     btnRangeCal3: document.getElementById('btnRangeCal3'),
@@ -174,6 +175,14 @@
     const rm = state.route_map;
     if (!rm) return;
 
+    // v6: tracking session — button + hero reflect the START/STOP TRACKING
+    // state (default active for backward compatibility).
+    const sessionActive = !rm.session || rm.session.active;
+    if (elements.btnToggleTracking) {
+      elements.btnToggleTracking.textContent = sessionActive ? 'STOP TRACKING' : 'START TRACKING';
+      elements.btnToggleTracking.classList.toggle('active', sessionActive);
+    }
+
     // 1. Journey Readouts
     if (elements.distSurfaceVal) {
       elements.distSurfaceVal.textContent = rm.distance_from_surface_m != null ? `${rm.distance_from_surface_m.toFixed(1)} m` : '-- m';
@@ -192,27 +201,38 @@
     // 2. Hero Card
     const atSurface = rm.distance_from_surface_m != null && rm.distance_from_surface_m < 10;
     if (elements.journeyStateTitle) {
-      elements.journeyStateTitle.textContent = !rm.tracking ? 'AWAITING FIRST FIX' : (atSurface ? 'AT SURFACE' : 'UNDERGROUND');
+      elements.journeyStateTitle.textContent = !sessionActive
+        ? 'TRACKING PAUSED'
+        : (!rm.tracking ? 'AWAITING FIRST FIX' : (atSurface ? 'AT SURFACE' : 'UNDERGROUND'));
     }
     if (elements.journeyStateTag) {
-      elements.journeyStateTag.textContent = rm.moving ? 'ROUTE TRACKING — MINER MOVING' : 'ROUTE TRACKING ACTIVE';
-      setStatusClass(elements.journeyStateTag, 'NORMAL');
+      elements.journeyStateTag.textContent = !sessionActive
+        ? 'TRACKING PAUSED — PRESS START TRACKING'
+        : (rm.moving ? 'ROUTE TRACKING — MINER MOVING' : 'ROUTE TRACKING ACTIVE');
+      setStatusClass(elements.journeyStateTag, sessionActive ? 'NORMAL' : 'WARNING');
     }
     if (elements.journeyStatusCode) {
-      elements.journeyStatusCode.textContent = rm.tracking
-        ? (rm.moving ? '[ STATUS: TRACKING — MINER MOVING ]' : '[ STATUS: TRACKING — MINER STATIONARY ]')
-        : '[ STATUS: AWAITING FIRST FIX ]';
+      elements.journeyStatusCode.textContent = !sessionActive
+        ? '[ STATUS: TRACKING PAUSED ]'
+        : (rm.tracking
+          ? (rm.moving ? '[ STATUS: TRACKING — MINER MOVING ]' : '[ STATUS: TRACKING — MINER STATIONARY ]')
+          : '[ STATUS: AWAITING FIRST FIX ]');
     }
     if (elements.routeMapHeroCard) {
       elements.routeMapHeroCard.classList.remove('status-normal', 'status-warning', 'status-critical');
-      elements.routeMapHeroCard.classList.add(rm.tracking ? 'status-normal' : 'status-warning');
+      elements.routeMapHeroCard.classList.add(rm.tracking && sessionActive ? 'status-normal' : 'status-warning');
     }
     if (elements.routeMapCanvasStatus) {
-      // v4/v5: reflect the dynamic map geometry + range-curve state
+      // v4/v5/v6: reflect the dynamic map geometry, range-curve and tracking
+      // session state (proximity lock flashes when the map snaps to a beacon)
       const geo = rm.geometry;
       const rc = state.range_cal;
-      if (rc && rc.capture) {
+      if (!sessionActive) {
+        elements.routeMapCanvasStatus.textContent = '[ TRACKING PAUSED — PRESS START TRACKING ]';
+      } else if (rc && rc.capture) {
         elements.routeMapCanvasStatus.textContent = `[ RANGE CAL — HOLD HELMET ${rc.capture.distance_m}m FROM NODE 2 · ${rc.capture.samples} SAMPLES ]`;
+      } else if (rm.proximity) {
+        elements.routeMapCanvasStatus.textContent = `[ PROXIMITY LOCK — ${rm.proximity.id} · SIGNAL ${rm.proximity.distance_m} m — MAP SNAPPED TO BEACON ]`;
       } else if (geo && geo.calibrating) {
         elements.routeMapCanvasStatus.textContent = '[ MAP CALIBRATING — KEEP NODES STATIONARY ]';
       } else if (rc && rc.calibrated) {
@@ -513,6 +533,23 @@
         if (typeof a.distance === 'number') {
           ctx.fillText(`${a.distance.toFixed(1)} m`, x, y + 26);
         }
+
+        // v6: proximity lock — pulsing ring around the beacon the helmet is
+        // being snapped toward (strong signal, map disagreement resolved).
+        if (rm.proximity && rm.proximity.id === a.id) {
+          const pulse = 20 + 6 * Math.sin(Date.now() / 280);
+          ctx.setLineDash([5, 4]);
+          ctx.strokeStyle = 'rgba(2, 132, 199, 0.85)';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(x, y, pulse, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.font = 'bold 8px JetBrains Mono, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#0369a1';
+          ctx.fillText('PROXIMITY LOCK', x, y - 26);
+        }
       });
 
     // ── Breadcrumb trajectory ───────────────────────────────────
@@ -725,6 +762,39 @@
       elements.btnFollowMiner.addEventListener('click', () => {
         view.follow = !view.follow;
         setFollowButton();
+      });
+    }
+
+    // v6: START/STOP TRACKING — session control. START opens a fresh session
+    // (breadcrumb cleared, position re-fixed from relay beacons; the route
+    // then draws itself as the miner moves, beacon proximity included). STOP
+    // freezes the trajectory.
+    if (elements.btnToggleTracking) {
+      elements.btnToggleTracking.addEventListener('click', async () => {
+        const active = !(currentState && currentState.route_map && currentState.route_map.session &&
+          currentState.route_map.session.active === false);
+        try {
+          const response = await fetch('/api/tracking', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: active ? 'stop' : 'start' })
+          });
+          const result = await response.json();
+          if (!response.ok || !result.success) {
+            if (elements.routeMapCanvasStatus) {
+              elements.routeMapCanvasStatus.textContent = `[ TRACKING CONTROL FAILED — ${result.error || 'unreachable'} ]`;
+            }
+          } else if (elements.routeMapCanvasStatus) {
+            elements.routeMapCanvasStatus.textContent = active
+              ? '[ TRACKING PAUSED — TRAJECTORY FROZEN ]'
+              : '[ TRACKING STARTED — POSITION RE-FIXING FROM RELAY BEACONS ]';
+          }
+        } catch (err) {
+          console.error('Tracking toggle failed:', err);
+          if (elements.routeMapCanvasStatus) {
+            elements.routeMapCanvasStatus.textContent = '[ TRACKING CONTROL FAILED — SERVER UNREACHABLE ]';
+          }
+        }
       });
     }
 

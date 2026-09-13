@@ -2,8 +2,9 @@
 import { StateManager } from '../src/server/stateManager.js';
 import { Node1Bridge } from '../src/server/node1Bridge.js';
 import { CalibrationEngine } from '../src/server/calibrationEngine.js';
+import { isolatedConfig } from './helpers/isolated_config.js';
 
-const sm = new StateManager();
+const sm = new StateManager(isolatedConfig());
 const bridge = new Node1Bridge(sm, '192.168.14.60', 1500);
 let pass = 0, fail = 0;
 function check(name, cond, extra = '') {
